@@ -19,6 +19,10 @@ git@github.com:yieldnest/yieldnest-vault-withdrawals.git
 
 git@github.com:yieldnest/yieldnest-vault-periphery.git
 
+### Safe multisig transaction safeguards
+
+git@github.com:yieldnest/safeguard.git
+
 ## RWA Vault Factory
 
 The RWA factory allows one-transaction creation of RWA vaults on demand using the yieldnest-vault logic.
@@ -94,6 +98,35 @@ These are the key parameters that are used when deploying a new RWA vault via th
 
 Base Withdrawal fee is 0, as withdrawals don't happen through the buffer. The Buffer is 0.
 
+### Proxy and Upgrade Ownership
+
+Vaults and related upgradeable components are deployed behind OpenZeppelin Transparent Upgradeable Proxies.
+
+Each vault deployment has one OpenZeppelin `ProxyAdmin`. The `ProxyAdmin` is owned by one `TimelockController`.
+
+The same timelock is also assigned wherever the deployment has critical protocol operations. This includes, at minimum:
+
+- upgrades through the `ProxyAdmin`
+- provider changes
+- asset changes
+- buffer changes
+- processor rule changes
+- allocator manager operations
+- hook manager operations
+- other critical configuration changes introduced by optional modules
+
+The factory must configure the timelock as the owner or role holder for these critical operations during deployment. Any temporary roles held by the factory or deployer for setup must be renounced or revoked before the deployment is considered complete.
+
+### Hooks
+
+Each Main Vault deployment includes one `MetaHooks` instance.
+
+The `MetaHooks` instance is configured as the hooks contract for the Main Vault.
+
+The initial `MetaHooks` hook set includes a `PauserHook` for the Main Vault.
+
+The `PauserHook` allows the configured pauser path to pause the Main Vault when the hook's pause condition is triggered. The `MetaHooks` hook manager role is controlled by the deployment timelock, so hook changes are treated as critical protocol operations.
+
 ### Flex strategy - OPTIONAL
 
 The flex strategy may be optionally included in the flex strategy or added manually later. 
@@ -107,6 +140,11 @@ The additional parameters here are:
 The parameters are the ones specified here:
 
 https://github.com/yieldnest/yieldnest-flex-strategy/blob/main/script/FlexStrategyDeployer.sol#L16
+
+Additional factory parameter:
+
+- **offRampAddress:**  
+  The address that is allowed to receive the flex strategy asset from the flex strategy multisig through the SafeGuard module.
 
 
 The rules here are that the base asset is the same base asset as the Main Vault.
@@ -123,6 +161,14 @@ Once that boostrap action is done, the role is renounced.
 
 The vault also preloads deposit/mint withdraw/redeem rules for the flex strategy if it exists.
 
+#### Flex strategy multisig SafeGuard
+
+The flex strategy multisig is expected to be configured with a SafeGuard module.
+
+The factory deploys the SafeGuard instance and configures it with a rule that permits sending the asset of the flex strategy to `offRampAddress`.
+
+The factory does not enable the SafeGuard module on the multisig. It is the user's responsibility to configure the deployed SafeGuard as a module for that multisig after creation.
+
 
 ### Bootstrapping
 
@@ -131,4 +177,3 @@ The Main Vault and Flex Strategy (if added) need to be boostrapped with one unit
 Eg. 1 USDC (1e6 in wei), 1 USDT (1e6 in Wei), 1 SUSD, (1e18 in wei).
 
 The factory create call transfers the asset or assets away from the users.
-
