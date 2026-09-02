@@ -117,6 +117,16 @@ The same timelock is also assigned wherever the deployment has critical protocol
 
 The factory must configure the timelock as the owner or role holder for these critical operations during deployment. Any temporary roles held by the factory or deployer for setup must be renounced or revoked before the deployment is considered complete.
 
+### Implementation Registry
+
+Factory deployment parameters refer to implementations through an `ImplementationRegistry`.
+
+The registry maps `bytes32` implementation keys to implementation addresses. A helper converts human-readable string keys into `bytes32` keys with `keccak256(bytes(key))`.
+
+The registry itself is deployed behind an OpenZeppelin Transparent Upgradeable Proxy. Its proxy admin is owned by the deployment timelock.
+
+The registry owner can set one implementation at a time or bulk update implementation keys and addresses. The factory should use registry keys rather than accepting arbitrary implementation addresses from vault creators.
+
 ### Hooks
 
 Each Main Vault deployment includes one `MetaHooks` instance.
