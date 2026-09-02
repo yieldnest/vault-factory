@@ -1,5 +1,24 @@
 # Vault factory
 
+## Relevant repos
+
+### Core vault contracts
+
+git@github.com:yieldnest/yieldnest-vault.git
+
+
+### Flex strategy contracts
+
+git@github.com:yieldnest/yieldnest-flex-strategy.git
+
+### Vault async withdrawals Contracts
+
+git@github.com:yieldnest/yieldnest-vault-withdrawals.git
+
+### Metahooks, hooks, and other periphery contracts
+
+git@github.com:yieldnest/yieldnest-vault-periphery.git
+
 ## RWA Vault Factory
 
 The RWA factory allows one-transaction creation of RWA vaults on demand using the yieldnest-vault logic.
@@ -69,11 +88,11 @@ These are the key parameters that are used when deploying a new RWA vault via th
   - If `true`, the vault includes the native asset balance when calculating its total assets under management.
   - If `false`, only ERC20 and explicitly defined assets are considered in total asset calculations.
 
-This setting is important for vaults that may receive or hold native assets alongside ERC20 tokens, ensuring accurate reporting and accounting within the vault's operations.
-
 - **timelockDuration:**  
   The duration (in seconds) of the timelock applied specifically to sensitive operations such as upgrades, asset changes, rate provider changes, and modifications to critical parameters. This timelock enforces a mandatory waiting period between when such an action is proposed (queued) and when it can actually be executed, providing additional time and security for stakeholders to review and react to these potentially impactful changes.
 
+
+Base Withdrawal fee is 0, as withdrawals don't happen through the buffer. The Buffer is 0.
 
 ### Flex strategy - OPTIONAL
 
