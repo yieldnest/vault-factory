@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Registry} from "src/Registry.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract MinimalProxy {
     address public immutable logic;
@@ -55,7 +56,7 @@ contract RegistryTest is Test {
     function testRegistryCannotBeInitializedDirectly() public {
         Registry registryLogic = new Registry();
 
-        vm.expectRevert(IRegistry.AlreadyInitialized.selector);
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
         registryLogic.initialize(owner);
     }
 

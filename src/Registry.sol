@@ -2,45 +2,44 @@
 pragma solidity ^0.8.24;
 
 import {IRegistry} from "src/interfaces/IRegistry.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-contract Registry is IRegistry {
-    mapping(bytes32 key => address value) private _values;
-
-    address private _owner;
-    bool private _initialized;
-
-    uint256[48] private __gap;
-
-    constructor() {
-        _initialized = true;
+contract Registry is IRegistry, Initializable {
+    /// @custom:storage-location erc7201:yieldnest.storage.registry
+    struct RegistryStorage {
+        mapping(bytes32 key => address value) values;
+        address owner;
     }
 
-    modifier initializer() {
-        if (_initialized) revert AlreadyInitialized();
-        _initialized = true;
-        _;
+    // keccak256(abi.encode(uint256(keccak256("yieldnest.storage.registry")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant RegistryStorageLocation =
+        0x909b8772e0cedce76b8d912ff5053b840584f359065328fbc58590c10ef52800;
+
+    constructor() {
+        _disableInitializers();
     }
 
     modifier onlyOwner() {
-        if (msg.sender != _owner) revert NotOwner(msg.sender);
+        if (msg.sender != _getRegistryStorage().owner) revert NotOwner(msg.sender);
         _;
     }
 
     function initialize(address owner_) external initializer {
         if (owner_ == address(0)) revert ZeroAddress();
-        _owner = owner_;
+        _getRegistryStorage().owner = owner_;
         emit OwnershipTransferred(address(0), owner_);
     }
 
     function owner() external view returns (address) {
-        return _owner;
+        return _getRegistryStorage().owner;
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
 
-        address previousOwner = _owner;
-        _owner = newOwner;
+        RegistryStorage storage $ = _getRegistryStorage();
+        address previousOwner = $.owner;
+        $.owner = newOwner;
         emit OwnershipTransferred(previousOwner, newOwner);
     }
 
@@ -49,11 +48,11 @@ contract Registry is IRegistry {
     }
 
     function valueOf(bytes32 key) external view returns (address) {
-        return _values[key];
+        return _getRegistryStorage().values[key];
     }
 
     function valueOf(string calldata key) external view returns (address) {
-        return _values[_keyOf(key)];
+        return _getRegistryStorage().values[_keyOf(key)];
     }
 
     function setValue(bytes32 key, address value) external onlyOwner {
@@ -90,8 +89,9 @@ contract Registry is IRegistry {
         if (key == bytes32(0)) revert EmptyKey();
         if (value == address(0)) revert ZeroAddress();
 
-        address previousValue = _values[key];
-        _values[key] = value;
+        RegistryStorage storage $ = _getRegistryStorage();
+        address previousValue = $.values[key];
+        $.values[key] = value;
 
         emit ValueUpdated(key, previousValue, value);
     }
@@ -99,5 +99,11 @@ contract Registry is IRegistry {
     function _keyOf(string calldata key) internal pure returns (bytes32) {
         if (bytes(key).length == 0) revert EmptyKey();
         return keccak256(bytes(key));
+    }
+
+    function _getRegistryStorage() private pure returns (RegistryStorage storage $) {
+        assembly {
+            $.slot := RegistryStorageLocation
+        }
     }
 }

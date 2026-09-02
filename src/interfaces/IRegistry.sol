@@ -5,7 +5,6 @@ interface IRegistry {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event ValueUpdated(bytes32 indexed key, address indexed previousValue, address indexed value);
 
-    error AlreadyInitialized();
     error EmptyKey();
     error InvalidArrayLength();
     error NotOwner(address caller);
