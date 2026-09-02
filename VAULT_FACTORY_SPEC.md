@@ -43,27 +43,73 @@ If the base asset has 18 decimals, base asset and default asset must be the same
 
 These are the key parameters that are used when deploying a new RWA vault via the factory:
 
-- **admin:** `ADMIN`  
+- **admin:**  
   The address that will have admin privileges over the vault.
 
-- **processor:** `ADMIN`  
+- **processor:**  
   The address that is authorized to process actions within the vault.
 
-- **pauser:** `ADMIN`  
-  The address that is allowed to pause vault functionality in the event of an emergency.
+- **pauser:**  
+  The address that is allowed to pause the vault functionality in the event of an emergency.
 
-- **unpauser:** `ADMIN`  
+- **unpauser:**  
   The address allowed to unpause the vault after it has been paused.
 
-- **feeManager:** `ADMIN`  
+- **feeManager:**  
   The address responsible for managing and collecting any fees associated with the vault.
 
-- **tokenName:** `"ASSET BACKED DERIVATIVE YIELD VAULT"`  
+- **tokenName:**  
   The display name of the vault’s share token.
 
-- **tokenSymbol:** `symbol()`  
-  The symbol for the vault's share token, set using the provided `symbol()` function or value.
+- **tokenSymbol:**  
+  The symbol for the vault's share token, set using the provided function or value.
+
+- **countNativeAsset:**  
+  A boolean parameter indicating whether the vault should count the native asset (e.g., ETH, BNB) as part of its total asset value.  
+  - If `true`, the vault includes the native asset balance when calculating its total assets under management.
+  - If `false`, only ERC20 and explicitly defined assets are considered in total asset calculations.
+
+This setting is important for vaults that may receive or hold native assets alongside ERC20 tokens, ensuring accurate reporting and accounting within the vault's operations.
+
+- **timelockDuration:**  
+  The duration (in seconds) of the timelock applied specifically to sensitive operations such as upgrades, asset changes, rate provider changes, and modifications to critical parameters. This timelock enforces a mandatory waiting period between when such an action is proposed (queued) and when it can actually be executed, providing additional time and security for stakeholders to review and react to these potentially impactful changes.
+
+
+### Flex strategy - OPTIONAL
+
+The flex strategy may be optionally included in the flex strategy or added manually later. 
+
+Specify a boolean param for deployStrategy.
+
+The additional parameters here are:
+
+#### Parameters
+
+The parameters are the ones specified here:
+
+https://github.com/yieldnest/yieldnest-flex-strategy/blob/main/script/FlexStrategyDeployer.sol#L16
+
+
+The rules here are that the base asset is the same base asset as the Main Vault.
+
+paused is false.
+
+The Allocators contains the Main Vault and the factory contract that will make the first boostrap deposit.
+
+Once that boostrap action is done, the role is renounced.
 
 
 
+#### Flex strategy deposit rules
+
+The vault also preloads deposit/mint withdraw/redeem rules for the flex strategy if it exists.
+
+
+### Bootstrapping
+
+The Main Vault and Flex Strategy (if added) need to be boostrapped with one unit of the default asset.
+
+Eg. 1 USDC (1e6 in wei), 1 USDT (1e6 in Wei), 1 SUSD, (1e18 in wei).
+
+The factory create call transfers the asset or assets away from the users.
 
