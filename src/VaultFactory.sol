@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "src/interfaces/external/IERC20.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
+import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
     string public constant VERSION = "0.1.0";
@@ -33,11 +33,10 @@ contract VaultFactory is IVaultFactory {
         uint256 defaultAssetIndex = params.baseAsset == params.defaultAsset ? 0 : 1;
 
         created.timelock = address(timelock);
-        created.vault = address(
-            new TransparentUpgradeableProxy(vaultLogic, address(timelock), _vaultInitData(params, defaultAssetIndex))
-        );
+        created.vault = address(new UninitializedTransparentUpgradeableProxy(vaultLogic, address(timelock)));
 
         IVault vault = IVault(created.vault);
+        _initializeVault(vault, params, defaultAssetIndex);
         _configureVault(vault, params, address(timelock), defaultAssetIndex);
 
         if (flexParams.deployStrategy) {
@@ -51,23 +50,16 @@ contract VaultFactory is IVaultFactory {
         emit VaultCreated(msg.sender, created.vault, created.timelock, created.safeGuard, created.flexStrategy);
     }
 
-    function _vaultInitData(VaultParams calldata params, uint256 defaultAssetIndex)
-        internal
-        view
-        returns (bytes memory)
-    {
-        return abi.encodeCall(
-            IVault.initialize,
-            (
-                address(this),
-                params.tokenName,
-                params.tokenSymbol,
-                VAULT_DECIMALS,
-                BASE_WITHDRAWAL_FEE,
-                params.countNativeAsset,
-                params.alwaysComputeTotalAssets,
-                defaultAssetIndex
-            )
+    function _initializeVault(IVault vault, VaultParams calldata params, uint256 defaultAssetIndex) internal {
+        vault.initialize(
+            address(this),
+            params.tokenName,
+            params.tokenSymbol,
+            VAULT_DECIMALS,
+            BASE_WITHDRAWAL_FEE,
+            params.countNativeAsset,
+            params.alwaysComputeTotalAssets,
+            defaultAssetIndex
         );
     }
 
