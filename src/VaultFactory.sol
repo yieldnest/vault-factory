@@ -13,6 +13,7 @@ import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol
 import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
+import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
@@ -44,16 +45,15 @@ contract VaultFactory is IVaultFactory {
         REGISTRY = registry;
     }
 
-    function createVault(
-        VaultParams calldata params,
-        RegistryKeys calldata keys,
-        FlexStrategyParams calldata flexParams
-    ) external returns (CreatedVault memory created) {
+    function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
+        external
+        returns (CreatedVault memory created)
+    {
         _validateVaultParams(params);
 
         TimelockController timelock = TimelockDeployer.deploy(params.admin, params.timelockDuration);
-        address vaultLogic = _registryValue(keys.vault);
-        Assets memory assets = _prepareAssets(params, keys, address(timelock));
+        address vaultLogic = _registryValue(RegistryKeys.VAULT);
+        Assets memory assets = _prepareAssets(params, address(timelock));
 
         created.timelock = address(timelock);
         created.wrappedToken = assets.wrappedToken;
@@ -63,7 +63,7 @@ contract VaultFactory is IVaultFactory {
         _initializeVault(vault, params, assets);
         _configureVault(vault, params, assets, address(timelock));
 
-        WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(vault, params, keys, address(timelock));
+        WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(vault, params, address(timelock));
         created.withdrawalRequest = withdrawals.withdrawalRequest;
         created.withdrawer = withdrawals.withdrawer;
         created.bagFactory = withdrawals.bagFactory;
@@ -127,30 +127,27 @@ contract VaultFactory is IVaultFactory {
         }
     }
 
-    function _prepareAssets(VaultParams calldata params, RegistryKeys calldata keys, address timelock)
-        internal
-        returns (Assets memory assets)
-    {
+    function _prepareAssets(VaultParams calldata params, address timelock) internal returns (Assets memory assets) {
         uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         assets.defaultAsset = params.defaultAsset;
 
         if (baseAssetDecimals == VAULT_DECIMALS) {
             assets.baseAsset = params.baseAsset;
         } else {
-            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, keys.wrappedToken, timelock);
+            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, timelock);
             assets.baseAsset = assets.wrappedToken;
         }
 
         assets.defaultAssetIndex = assets.baseAsset == assets.defaultAsset ? 0 : 1;
     }
 
-    function _deployWrappedToken(
-        address underlying,
-        uint8 underlyingDecimals,
-        bytes32 wrappedTokenKey,
-        address timelock
-    ) internal returns (address wrappedToken) {
-        wrappedToken = address(new UninitializedTransparentUpgradeableProxy(_registryValue(wrappedTokenKey), timelock));
+    function _deployWrappedToken(address underlying, uint8 underlyingDecimals, address timelock)
+        internal
+        returns (address wrappedToken)
+    {
+        wrappedToken = address(
+            new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WRAPPED_TOKEN), timelock)
+        );
         IWrappedToken(wrappedToken)
             .initialize(
                 IERC20(underlying),
@@ -191,25 +188,24 @@ contract VaultFactory is IVaultFactory {
         vault.setBuffer(address(0));
     }
 
-    function _deployWithdrawalSystem(
-        IVault vault,
-        VaultParams calldata params,
-        RegistryKeys calldata keys,
-        address timelock
-    ) internal returns (WithdrawalSystem memory withdrawals) {
+    function _deployWithdrawalSystem(IVault vault, VaultParams calldata params, address timelock)
+        internal
+        returns (WithdrawalSystem memory withdrawals)
+    {
         // The withdrawal request proxy is deployed uninitialized first because the withdrawer and
         // the bag factory both need its address during their own initialization.
-        withdrawals.withdrawalRequest =
-            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.withdrawalRequest), timelock));
+        withdrawals.withdrawalRequest = address(
+            new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WITHDRAWAL_REQUEST), timelock)
+        );
 
         withdrawals.withdrawer =
-            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.withdrawer), timelock));
+            address(new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WITHDRAWER), timelock));
         IWithdrawer(withdrawals.withdrawer).initialize(address(vault), withdrawals.withdrawalRequest);
 
         withdrawals.bagFactory =
-            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.bagFactory), timelock));
+            address(new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.BAG_FACTORY), timelock));
         IBeaconProxyFactory(withdrawals.bagFactory)
-            .initialize(_registryValue(keys.bag), timelock, withdrawals.withdrawalRequest, timelock);
+            .initialize(_registryValue(RegistryKeys.BAG), timelock, withdrawals.withdrawalRequest, timelock);
 
         withdrawals.requestPolicy = address(new MinAmountRequestPolicy(params.minWithdrawalAmount));
 
@@ -248,7 +244,6 @@ contract VaultFactory is IVaultFactory {
     }
 
     function _registryValue(bytes32 key) internal view returns (address value) {
-        if (key == bytes32(0)) revert EmptyKey(key);
         value = REGISTRY.valueOf(key);
         if (value == address(0)) revert MissingRegistryValue(key);
     }

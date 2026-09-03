@@ -7,6 +7,7 @@ import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
 import {Registry} from "src/Registry.sol";
+import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
 
 interface IProxyAdminOwner {
@@ -310,12 +311,6 @@ contract MockBagFactory {
 contract MockBag {}
 
 contract VaultFactoryTest is Test {
-    bytes32 private constant VAULT_KEY = keccak256("VAULT");
-    bytes32 private constant WRAPPED_TOKEN_KEY = keccak256("WRAPPED_TOKEN");
-    bytes32 private constant WITHDRAWAL_REQUEST_KEY = keccak256("WITHDRAWAL_REQUEST");
-    bytes32 private constant WITHDRAWER_KEY = keccak256("WITHDRAWER");
-    bytes32 private constant BAG_FACTORY_KEY = keccak256("BAG_FACTORY");
-    bytes32 private constant BAG_KEY = keccak256("BAG");
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
     address private admin = address(0xA11CE);
@@ -354,12 +349,12 @@ contract VaultFactoryTest is Test {
         bagFactoryLogic = new MockBagFactory();
         bagLogic = new MockBag();
 
-        registry.setValue(VAULT_KEY, address(vaultLogic));
-        registry.setValue(WRAPPED_TOKEN_KEY, address(wrappedTokenLogic));
-        registry.setValue(WITHDRAWAL_REQUEST_KEY, address(withdrawalRequestLogic));
-        registry.setValue(WITHDRAWER_KEY, address(withdrawerLogic));
-        registry.setValue(BAG_FACTORY_KEY, address(bagFactoryLogic));
-        registry.setValue(BAG_KEY, address(bagLogic));
+        registry.setValue(RegistryKeys.VAULT, address(vaultLogic));
+        registry.setValue(RegistryKeys.WRAPPED_TOKEN, address(wrappedTokenLogic));
+        registry.setValue(RegistryKeys.WITHDRAWAL_REQUEST, address(withdrawalRequestLogic));
+        registry.setValue(RegistryKeys.WITHDRAWER, address(withdrawerLogic));
+        registry.setValue(RegistryKeys.BAG_FACTORY, address(bagFactoryLogic));
+        registry.setValue(RegistryKeys.BAG, address(bagLogic));
 
         asset.mint(creator, 1 ether);
     }
@@ -370,7 +365,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         IVaultFactory.CreatedVault memory created =
-            factory.createVault(_vaultParams(1 ether), _registryKeys(), _emptyFlexParams());
+            factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
         vm.stopPrank();
 
         assertEq(created.wrappedToken, address(0));
@@ -458,7 +453,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 1e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
         vm.stopPrank();
 
         assertTrue(created.wrappedToken != address(0));
@@ -493,7 +488,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdt.approve(address(factory), 1e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
         vm.stopPrank();
 
         MockVault vault = MockVault(created.vault);
@@ -511,18 +506,20 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         vm.expectRevert(IVaultFactory.FunctionalityUnavailable.selector);
-        factory.createVault(_vaultParams(1 ether), _registryKeys(), flexParams);
+        factory.createVault(_vaultParams(1 ether), flexParams);
         vm.stopPrank();
     }
 
     function testCreateVaultRevertsForMissingRegistryValue() public {
-        IVaultFactory.RegistryKeys memory keys = _registryKeys();
-        keys.vault = keccak256("MISSING");
+        Registry emptyRegistryLogic = new Registry();
+        RegistryProxy emptyRegistryProxy =
+            new RegistryProxy(address(emptyRegistryLogic), abi.encodeCall(IRegistry.initialize, (address(this))));
+        VaultFactory emptyRegistryFactory = new VaultFactory(IRegistry(address(emptyRegistryProxy)));
 
         vm.startPrank(creator);
-        asset.approve(address(factory), 1 ether);
-        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, keys.vault));
-        factory.createVault(_vaultParams(1 ether), keys, _emptyFlexParams());
+        asset.approve(address(emptyRegistryFactory), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.VAULT));
+        emptyRegistryFactory.createVault(_vaultParams(1 ether), _emptyFlexParams());
         vm.stopPrank();
     }
 
@@ -535,7 +532,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         vm.expectRevert(IVaultFactory.InvalidDefaultAsset.selector);
-        factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        factory.createVault(params, _emptyFlexParams());
         vm.stopPrank();
     }
 
@@ -559,17 +556,6 @@ contract VaultFactoryTest is Test {
             maxDataLength: 256,
             bootstrapAmount: bootstrapAmount,
             bootstrapReceiver: bootstrapReceiver
-        });
-    }
-
-    function _registryKeys() internal pure returns (IVaultFactory.RegistryKeys memory) {
-        return IVaultFactory.RegistryKeys({
-            vault: VAULT_KEY,
-            wrappedToken: WRAPPED_TOKEN_KEY,
-            withdrawalRequest: WITHDRAWAL_REQUEST_KEY,
-            withdrawer: WITHDRAWER_KEY,
-            bagFactory: BAG_FACTORY_KEY,
-            bag: BAG_KEY
         });
     }
 

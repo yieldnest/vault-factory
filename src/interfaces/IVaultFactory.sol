@@ -23,15 +23,6 @@ interface IVaultFactory {
         address bootstrapReceiver;
     }
 
-    struct RegistryKeys {
-        bytes32 vault;
-        bytes32 wrappedToken;
-        bytes32 withdrawalRequest;
-        bytes32 withdrawer;
-        bytes32 bagFactory;
-        bytes32 bag;
-    }
-
     struct FlexStrategyParams {
         bool deployStrategy;
         address multisig;
@@ -65,16 +56,13 @@ interface IVaultFactory {
     );
 
     error AssetDecimalsTooHigh(uint8 decimals);
-    error EmptyKey(bytes32 key);
     error FunctionalityUnavailable();
     error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);
     error ZeroAddress();
     error ZeroAmount();
 
-    function createVault(
-        VaultParams calldata params,
-        RegistryKeys calldata keys,
-        FlexStrategyParams calldata flexParams
-    ) external returns (CreatedVault memory created);
+    function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
+        external
+        returns (CreatedVault memory created);
 }

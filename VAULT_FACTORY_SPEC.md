@@ -138,6 +138,15 @@ The registry owner can set one key-value pair at a time or bulk update keys and 
 
 The factory reads the Main Vault logic and Wrapped Token logic from the registry. The Wrapped Token logic is only required when the requested Base Asset has fewer than 18 decimals.
 
+The registry keys used by the factory are fixed constants compiled into the factory; vault creators cannot choose which keys are read. Key strings are namespaced as `<org>.<repo>.contracts.<source path>` of the implementation:
+
+- `yieldnest.yieldnest-vault.contracts.src.Vault`
+- `yieldnest.wrapped-token.contracts.src.WrappedToken`
+- `yieldnest.yieldnest-vault-withdrawals.contracts.src.WithdrawalRequest`
+- `yieldnest.yieldnest-vault-withdrawals.contracts.src.withdrawers.BaseWithdrawer`
+- `yieldnest.yieldnest-vault-withdrawals.contracts.src.BeaconProxyFactory`
+- `yieldnest.yieldnest-vault-withdrawals.contracts.src.Bag`
+
 ### Hooks
 
 Hook deployment is out of scope for this factory revision.
