@@ -146,6 +146,32 @@ The factory still assigns the Main Vault hook manager role to the deployment tim
 
 When hook deployment is added back, it should use the actual periphery contracts and APIs rather than inferred factory interfaces.
 
+### Async withdrawals
+
+Because the buffer is 0, standard synchronous ERC4626 withdrawals are unavailable. The factory deploys the async withdrawal system from yieldnest-vault-withdrawals as part of every vault deployment:
+
+- **WithdrawalRequest** — the ERC721 request contract, bound to the Main Vault share token.
+- **BaseWithdrawer** — the adapter that forwards withdrawals to the Main Vault. The factory grants it the vault's `ASSET_WITHDRAWER_ROLE`.
+- **BeaconProxyFactory** — the bag factory used by the WithdrawalRequest to create per-request bags. Its beacon points at the Bag implementation.
+- **MinAmountRequestPolicy** — the request policy, deployed directly by the factory with the per-vault `minWithdrawalAmount` (it is constructor-parameterized and not upgradeable, so it does not come from the registry).
+
+The WithdrawalRequest, BaseWithdrawer, and BeaconProxyFactory implementations are read from the registry, together with the Bag implementation. Each of the three is deployed behind an OpenZeppelin Transparent Upgradeable Proxy whose `ProxyAdmin` is owned by the deployment timelock.
+
+Role assignment: the WithdrawalRequest default admin and configuration manager are the deployment timelock; the bag factory default admin and implementation manager are the deployment timelock; the bag factory creator is the WithdrawalRequest.
+
+Additional vault parameters:
+
+- **resolver:**
+  The address granted `RESOLVER_ROLE` on the WithdrawalRequest, allowed to resolve withdrawal requests.
+
+- **minWithdrawalAmount:**
+  The minimum share amount each withdrawal request must lock, enforced by the MinAmountRequestPolicy.
+
+- **maxDataLength:**
+  The maximum bytes allowed in withdrawal request metadata.
+
+The WithdrawalRequest pauser is the same `pauser` address used for the Main Vault (the WithdrawalRequest has a single `PAUSER_ROLE` covering both pause and unpause; the timelock can grant it to additional accounts later).
+
 ### Flex strategy - OPTIONAL
 
 TODO: factory deployment of the flex strategy is out of scope for this revision.

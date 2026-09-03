@@ -23,6 +23,7 @@ interface IVault {
     function PROCESSOR_MANAGER_ROLE() external view returns (bytes32);
     function HOOKS_MANAGER_ROLE() external view returns (bytes32);
     function FEE_MANAGER_ROLE() external view returns (bytes32);
+    function ASSET_WITHDRAWER_ROLE() external view returns (bytes32);
 
     function grantRole(bytes32 role, address account) external;
     function renounceRole(bytes32 role, address callerConfirmation) external;

@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
 import {Registry} from "src/Registry.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
 
@@ -122,6 +123,7 @@ contract MockVault {
     bytes32 public constant PROCESSOR_MANAGER_ROLE = keccak256("PROCESSOR_MANAGER_ROLE");
     bytes32 public constant HOOKS_MANAGER_ROLE = keccak256("HOOKS_MANAGER_ROLE");
     bytes32 public constant FEE_MANAGER_ROLE = keccak256("FEE_MANAGER_ROLE");
+    bytes32 public constant ASSET_WITHDRAWER_ROLE = keccak256("ASSET_WITHDRAWER_ROLE");
 
     mapping(bytes32 => mapping(address => bool)) public hasRole;
     mapping(address => bool) public activeAsset;
@@ -236,9 +238,84 @@ contract MockWrappedToken {
     }
 }
 
+contract MockWithdrawalRequest {
+    address public token;
+    address public defaultAdmin;
+    address public resolver;
+    address public configurationManager;
+    address public pauser;
+    address public bagFactory;
+    address public withdrawer;
+    address public requestPolicy;
+    uint256 public maxDataLength;
+    bool public initialized;
+
+    function initialize(
+        address token_,
+        address defaultAdmin_,
+        address resolver_,
+        address configurationManager_,
+        address pauser_,
+        address bagFactory_,
+        address withdrawer_,
+        address requestPolicy_,
+        uint256 maxDataLength_
+    ) external {
+        require(!initialized, "initialized");
+        initialized = true;
+        token = token_;
+        defaultAdmin = defaultAdmin_;
+        resolver = resolver_;
+        configurationManager = configurationManager_;
+        pauser = pauser_;
+        bagFactory = bagFactory_;
+        withdrawer = withdrawer_;
+        requestPolicy = requestPolicy_;
+        maxDataLength = maxDataLength_;
+    }
+}
+
+contract MockWithdrawer {
+    address public token;
+    address public withdrawalRequest;
+    bool public initialized;
+
+    function initialize(address token_, address withdrawalRequest_) external {
+        require(!initialized, "initialized");
+        initialized = true;
+        token = token_;
+        withdrawalRequest = withdrawalRequest_;
+    }
+}
+
+contract MockBagFactory {
+    address public implementation;
+    address public defaultAdmin;
+    address public creator;
+    address public implementationManager;
+    bool public initialized;
+
+    function initialize(address implementation_, address defaultAdmin_, address creator_, address implementationManager_)
+        external
+    {
+        require(!initialized, "initialized");
+        initialized = true;
+        implementation = implementation_;
+        defaultAdmin = defaultAdmin_;
+        creator = creator_;
+        implementationManager = implementationManager_;
+    }
+}
+
+contract MockBag {}
+
 contract VaultFactoryTest is Test {
     bytes32 private constant VAULT_KEY = keccak256("VAULT");
     bytes32 private constant WRAPPED_TOKEN_KEY = keccak256("WRAPPED_TOKEN");
+    bytes32 private constant WITHDRAWAL_REQUEST_KEY = keccak256("WITHDRAWAL_REQUEST");
+    bytes32 private constant WITHDRAWER_KEY = keccak256("WITHDRAWER");
+    bytes32 private constant BAG_FACTORY_KEY = keccak256("BAG_FACTORY");
+    bytes32 private constant BAG_KEY = keccak256("BAG");
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
     address private admin = address(0xA11CE);
@@ -246,6 +323,7 @@ contract VaultFactoryTest is Test {
     address private pauser = address(0xCAFE);
     address private unpauser = address(0xD00D);
     address private feeManager = address(0xFEE);
+    address private resolver = address(0x2E50);
     address private provider = address(0xF00D);
     address private bootstrapReceiver = address(0xB007);
     address private creator = address(0xC0DEC);
@@ -255,6 +333,10 @@ contract VaultFactoryTest is Test {
     MockToken private asset;
     MockVault private vaultLogic;
     MockWrappedToken private wrappedTokenLogic;
+    MockWithdrawalRequest private withdrawalRequestLogic;
+    MockWithdrawer private withdrawerLogic;
+    MockBagFactory private bagFactoryLogic;
+    MockBag private bagLogic;
 
     function setUp() public {
         Registry registryLogic = new Registry();
@@ -267,8 +349,17 @@ contract VaultFactoryTest is Test {
         vaultLogic = new MockVault();
         wrappedTokenLogic = new MockWrappedToken();
 
+        withdrawalRequestLogic = new MockWithdrawalRequest();
+        withdrawerLogic = new MockWithdrawer();
+        bagFactoryLogic = new MockBagFactory();
+        bagLogic = new MockBag();
+
         registry.setValue(VAULT_KEY, address(vaultLogic));
         registry.setValue(WRAPPED_TOKEN_KEY, address(wrappedTokenLogic));
+        registry.setValue(WITHDRAWAL_REQUEST_KEY, address(withdrawalRequestLogic));
+        registry.setValue(WITHDRAWER_KEY, address(withdrawerLogic));
+        registry.setValue(BAG_FACTORY_KEY, address(bagFactoryLogic));
+        registry.setValue(BAG_KEY, address(bagLogic));
 
         asset.mint(creator, 1 ether);
     }
@@ -317,6 +408,44 @@ contract VaultFactoryTest is Test {
 
         address proxyAdmin = address(uint160(uint256(vm.load(created.vault, ERC1967_ADMIN_SLOT))));
         assertEq(IProxyAdminOwner(proxyAdmin).owner(), created.timelock);
+
+        _assertWithdrawalSystem(created);
+    }
+
+    function _assertWithdrawalSystem(IVaultFactory.CreatedVault memory created) internal view {
+        MockVault vault = MockVault(created.vault);
+
+        MockWithdrawalRequest withdrawalRequest = MockWithdrawalRequest(created.withdrawalRequest);
+        assertTrue(withdrawalRequest.initialized());
+        assertEq(withdrawalRequest.token(), created.vault);
+        assertEq(withdrawalRequest.defaultAdmin(), created.timelock);
+        assertEq(withdrawalRequest.resolver(), resolver);
+        assertEq(withdrawalRequest.configurationManager(), created.timelock);
+        assertEq(withdrawalRequest.pauser(), pauser);
+        assertEq(withdrawalRequest.bagFactory(), created.bagFactory);
+        assertEq(withdrawalRequest.withdrawer(), created.withdrawer);
+        assertEq(withdrawalRequest.requestPolicy(), created.requestPolicy);
+        assertEq(withdrawalRequest.maxDataLength(), 256);
+
+        MockWithdrawer withdrawer = MockWithdrawer(created.withdrawer);
+        assertEq(withdrawer.token(), created.vault);
+        assertEq(withdrawer.withdrawalRequest(), created.withdrawalRequest);
+        assertTrue(vault.hasRole(vault.ASSET_WITHDRAWER_ROLE(), created.withdrawer));
+
+        MockBagFactory bagFactory = MockBagFactory(created.bagFactory);
+        assertEq(bagFactory.implementation(), address(bagLogic));
+        assertEq(bagFactory.defaultAdmin(), created.timelock);
+        assertEq(bagFactory.creator(), created.withdrawalRequest);
+        assertEq(bagFactory.implementationManager(), created.timelock);
+
+        assertEq(MinAmountRequestPolicy(created.requestPolicy).minWithdrawalAmount(), 0.01 ether);
+
+        address requestProxyAdmin = address(uint160(uint256(vm.load(created.withdrawalRequest, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(requestProxyAdmin).owner(), created.timelock);
+        address withdrawerProxyAdmin = address(uint160(uint256(vm.load(created.withdrawer, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(withdrawerProxyAdmin).owner(), created.timelock);
+        address bagFactoryProxyAdmin = address(uint160(uint256(vm.load(created.bagFactory, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(bagFactoryProxyAdmin).owner(), created.timelock);
     }
 
     function testCreateVaultWrapsNon18DecimalBaseAsset() public {
@@ -417,6 +546,7 @@ contract VaultFactoryTest is Test {
             pauser: pauser,
             unpauser: unpauser,
             feeManager: feeManager,
+            resolver: resolver,
             baseAsset: address(asset),
             defaultAsset: address(asset),
             provider: provider,
@@ -425,13 +555,22 @@ contract VaultFactoryTest is Test {
             countNativeAsset: false,
             alwaysComputeTotalAssets: true,
             timelockDuration: 1 days,
+            minWithdrawalAmount: 0.01 ether,
+            maxDataLength: 256,
             bootstrapAmount: bootstrapAmount,
             bootstrapReceiver: bootstrapReceiver
         });
     }
 
     function _registryKeys() internal pure returns (IVaultFactory.RegistryKeys memory) {
-        return IVaultFactory.RegistryKeys({vault: VAULT_KEY, wrappedToken: WRAPPED_TOKEN_KEY});
+        return IVaultFactory.RegistryKeys({
+            vault: VAULT_KEY,
+            wrappedToken: WRAPPED_TOKEN_KEY,
+            withdrawalRequest: WITHDRAWAL_REQUEST_KEY,
+            withdrawer: WITHDRAWER_KEY,
+            bagFactory: BAG_FACTORY_KEY,
+            bag: BAG_KEY
+        });
     }
 
     function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {

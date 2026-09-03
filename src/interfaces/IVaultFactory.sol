@@ -8,6 +8,7 @@ interface IVaultFactory {
         address pauser;
         address unpauser;
         address feeManager;
+        address resolver;
         address baseAsset;
         address defaultAsset;
         address provider;
@@ -16,6 +17,8 @@ interface IVaultFactory {
         bool countNativeAsset;
         bool alwaysComputeTotalAssets;
         uint256 timelockDuration;
+        uint256 minWithdrawalAmount;
+        uint256 maxDataLength;
         uint256 bootstrapAmount;
         address bootstrapReceiver;
     }
@@ -23,6 +26,10 @@ interface IVaultFactory {
     struct RegistryKeys {
         bytes32 vault;
         bytes32 wrappedToken;
+        bytes32 withdrawalRequest;
+        bytes32 withdrawer;
+        bytes32 bagFactory;
+        bytes32 bag;
     }
 
     struct FlexStrategyParams {
@@ -36,6 +43,10 @@ interface IVaultFactory {
         address vault;
         address timelock;
         address wrappedToken;
+        address withdrawalRequest;
+        address withdrawer;
+        address bagFactory;
+        address requestPolicy;
         address safeGuard;
         address flexStrategy;
     }
@@ -45,6 +56,10 @@ interface IVaultFactory {
         address indexed vault,
         address indexed timelock,
         address wrappedToken,
+        address withdrawalRequest,
+        address withdrawer,
+        address bagFactory,
+        address requestPolicy,
         address safeGuard,
         address flexStrategy
     );

@@ -7,8 +7,12 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
+import {IBeaconProxyFactory} from "src/interfaces/external/IBeaconProxyFactory.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
+import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol";
+import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
+import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
@@ -23,6 +27,13 @@ contract VaultFactory is IVaultFactory {
         address defaultAsset;
         uint256 defaultAssetIndex;
         address wrappedToken;
+    }
+
+    struct WithdrawalSystem {
+        address withdrawalRequest;
+        address withdrawer;
+        address bagFactory;
+        address requestPolicy;
     }
 
     IRegistry public immutable REGISTRY;
@@ -51,6 +62,12 @@ contract VaultFactory is IVaultFactory {
         _initializeVault(vault, params, assets);
         _configureVault(vault, params, assets, address(timelock));
 
+        WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(vault, params, keys, address(timelock));
+        created.withdrawalRequest = withdrawals.withdrawalRequest;
+        created.withdrawer = withdrawals.withdrawer;
+        created.bagFactory = withdrawals.bagFactory;
+        created.requestPolicy = withdrawals.requestPolicy;
+
         if (flexParams.deployStrategy) {
             // TODO: Deploy and configure the flex strategy once its deployment API is finalized.
             // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
@@ -61,7 +78,16 @@ contract VaultFactory is IVaultFactory {
         _renounceTemporaryRoles(vault);
 
         emit VaultCreated(
-            msg.sender, created.vault, created.timelock, created.wrappedToken, created.safeGuard, created.flexStrategy
+            msg.sender,
+            created.vault,
+            created.timelock,
+            created.wrappedToken,
+            created.withdrawalRequest,
+            created.withdrawer,
+            created.bagFactory,
+            created.requestPolicy,
+            created.safeGuard,
+            created.flexStrategy
         );
     }
 
@@ -82,8 +108,8 @@ contract VaultFactory is IVaultFactory {
         if (
             params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
                 || params.unpauser == address(0) || params.feeManager == address(0) || params.baseAsset == address(0)
-                || params.defaultAsset == address(0) || params.provider == address(0)
-                || params.bootstrapReceiver == address(0)
+                || params.resolver == address(0) || params.defaultAsset == address(0)
+                || params.provider == address(0) || params.bootstrapReceiver == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -172,6 +198,43 @@ contract VaultFactory is IVaultFactory {
         }
         vault.setProvider(params.provider);
         vault.setBuffer(address(0));
+    }
+
+    function _deployWithdrawalSystem(
+        IVault vault,
+        VaultParams calldata params,
+        RegistryKeys calldata keys,
+        address timelock
+    ) internal returns (WithdrawalSystem memory withdrawals) {
+        // The withdrawal request proxy is deployed uninitialized first because the withdrawer and
+        // the bag factory both need its address during their own initialization.
+        withdrawals.withdrawalRequest =
+            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.withdrawalRequest), timelock));
+
+        withdrawals.withdrawer =
+            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.withdrawer), timelock));
+        IWithdrawer(withdrawals.withdrawer).initialize(address(vault), withdrawals.withdrawalRequest);
+
+        withdrawals.bagFactory =
+            address(new UninitializedTransparentUpgradeableProxy(_registryValue(keys.bagFactory), timelock));
+        IBeaconProxyFactory(withdrawals.bagFactory)
+            .initialize(_registryValue(keys.bag), timelock, withdrawals.withdrawalRequest, timelock);
+
+        withdrawals.requestPolicy = address(new MinAmountRequestPolicy(params.minWithdrawalAmount));
+
+        IWithdrawalRequest(withdrawals.withdrawalRequest).initialize(
+            address(vault),
+            timelock,
+            params.resolver,
+            timelock,
+            params.pauser,
+            withdrawals.bagFactory,
+            withdrawals.withdrawer,
+            withdrawals.requestPolicy,
+            params.maxDataLength
+        );
+
+        vault.grantRole(vault.ASSET_WITHDRAWER_ROLE(), withdrawals.withdrawer);
     }
 
     function _bootstrap(IVault vault, VaultParams calldata params) internal {
