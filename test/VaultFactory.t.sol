@@ -344,6 +344,19 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
+    function testCreateVaultRevertsWhen18DecimalBaseDiffersFromDefaultAsset() public {
+        MockToken defaultAsset = new MockToken(18);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        params.defaultAsset = address(defaultAsset);
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        vm.expectRevert(IVaultFactory.InvalidDefaultAsset.selector);
+        factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        vm.stopPrank();
+    }
+
     function _vaultParams(uint256 bootstrapAmount) internal view returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: admin,

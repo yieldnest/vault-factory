@@ -85,8 +85,10 @@ contract VaultFactory is IVaultFactory {
         }
 
         if (params.bootstrapAmount == 0) revert ZeroAmount();
-        if (IERC20Metadata(params.baseAsset).decimals() > VAULT_DECIMALS) {
-            revert AssetDecimalsTooHigh(IERC20Metadata(params.baseAsset).decimals());
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);
+        if (baseAssetDecimals == VAULT_DECIMALS && params.baseAsset != params.defaultAsset) {
+            revert InvalidDefaultAsset();
         }
         if (params.baseAsset != params.defaultAsset && IERC20Metadata(params.defaultAsset).decimals() > VAULT_DECIMALS)
         {
