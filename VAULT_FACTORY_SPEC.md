@@ -92,6 +92,9 @@ These are the key parameters that are used when deploying a new RWA vault via th
   - If `true`, the vault includes the native asset balance when calculating its total assets under management.
   - If `false`, only ERC20 and explicitly defined assets are considered in total asset calculations.
 
+- **alwaysComputeTotalAssets:**  
+  A boolean parameter passed to the Main Vault initializer indicating whether `totalAssets` should always be computed from the vault's configured accounting path instead of using any cached or optimized accounting behavior exposed by the vault implementation.
+
 - **timelockDuration:**  
   The duration (in seconds) of the timelock applied specifically to sensitive operations such as upgrades, asset changes, rate provider changes, and modifications to critical parameters. This timelock enforces a mandatory waiting period between when such an action is proposed (queued) and when it can actually be executed, providing additional time and security for stakeholders to review and react to these potentially impactful changes.
 
@@ -129,19 +132,19 @@ The registry owner can set one key-value pair at a time or bulk update keys and 
 
 ### Hooks
 
-Each Main Vault deployment includes one `MetaHooks` instance.
+Hook deployment is out of scope for this factory revision.
 
-The `MetaHooks` instance is configured as the hooks contract for the Main Vault.
+The factory still assigns the Main Vault hook manager role to the deployment timelock, so future hook installation or hook replacement remains a critical timelocked operation.
 
-The initial `MetaHooks` hook set includes a `PauserHook` for the Main Vault.
-
-The `PauserHook` allows the configured pauser path to pause the Main Vault when the hook's pause condition is triggered. The `MetaHooks` hook manager role is controlled by the deployment timelock, so hook changes are treated as critical protocol operations.
+When hook deployment is added back, it should use the actual periphery contracts and APIs rather than inferred factory interfaces.
 
 ### Flex strategy - OPTIONAL
 
-The flex strategy may be optionally included in the flex strategy or added manually later. 
+TODO: factory deployment of the flex strategy is out of scope for this revision.
 
-Specify a boolean param for deployStrategy.
+The flex strategy may be optionally added manually later.
+
+The factory keeps the `deployStrategy` parameter as an explicit placeholder for a future revision.
 
 The additional parameters here are:
 
@@ -175,7 +178,7 @@ The vault also preloads deposit/mint withdraw/redeem rules for the flex strategy
 
 The flex strategy multisig is expected to be configured with a SafeGuard module.
 
-The factory deploys the SafeGuard instance and configures it with a rule that permits sending the asset of the flex strategy to `offRampAddress`.
+TODO: factory deployment of the SafeGuard instance is out of scope for this revision. When added, the factory should deploy the SafeGuard instance and configure it with a rule that permits sending the asset of the flex strategy to `offRampAddress`.
 
 The factory does not enable the SafeGuard module on the multisig. It is the user's responsibility to configure the deployed SafeGuard as a module for that multisig after creation.
 
