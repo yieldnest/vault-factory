@@ -12,7 +12,7 @@ import {IVault} from "src/interfaces/external/IVault.sol";
 import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol";
 import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
-import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
+import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/MinAmountRequestPolicy.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";

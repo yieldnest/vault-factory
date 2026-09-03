@@ -1,5 +1,14 @@
 {
   "lib/forge-std": {
     "rev": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
+  },
+  "lib/openzeppelin-contracts-upgradeable": {
+    "rev": "fffcb3c8ec0ad1ee559976f0b1709ae2fdc60702"
+  },
+  "lib/yieldnest-vault-withdrawals": {
+    "tag": {
+      "name": "v0.1.0",
+      "rev": "11f23e5691ec6725d8d18c2e0ad8ec9de1d1dedc"
+    }
   }
 }

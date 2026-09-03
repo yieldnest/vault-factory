@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
+import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/MinAmountRequestPolicy.sol";
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
