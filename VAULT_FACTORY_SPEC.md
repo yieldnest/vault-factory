@@ -15,6 +15,10 @@ git@github.com:yieldnest/yieldnest-flex-strategy.git
 
 git@github.com:yieldnest/yieldnest-vault-withdrawals.git
 
+### Wrapped token contracts
+
+git@github.com:yieldnest/wrapped-token.git
+
 ### Metahooks, hooks, and other periphery contracts
 
 git@github.com:yieldnest/yieldnest-vault-periphery.git
@@ -53,9 +57,11 @@ This is the Base Asset of the vault, in which all other assets in the vaults are
 
 Eg. WETH, WBNB, SUDS. 
 
-Number of decimals of Base Asset MUST be 18. 
+The effective Base Asset used by the Main Vault MUST have 18 decimals.
 
-So in case the vault needs to price the vault in terms of USDC, USDT or any token that does not have 18 decimals, a wrapper needs to be deployed to extend the decimals with an instance of Wrapped Token. 
+If the requested Base Asset has fewer than 18 decimals, the factory deploys a Wrapped Token for that asset and uses the wrapper as the Main Vault's effective Base Asset. The wrapper is initialized with 18 decimals and a decimal offset of `18 - underlyingDecimals`.
+
+The Wrapped Token is deployed behind the same OpenZeppelin Transparent Upgradeable Proxy pattern as the Main Vault. Its `ProxyAdmin` is owned by the same deployment timelock used for the Main Vault, so wrapper upgrades follow the same upgradeability rules.
 
 
 If the base asset has 18 decimals, base asset and default asset must be the same.
@@ -129,6 +135,8 @@ The registry maps `bytes32` keys to address values. A helper converts human-read
 The registry itself is deployed behind an OpenZeppelin Transparent Upgradeable Proxy. Its proxy admin is owned by the deployment timelock.
 
 The registry owner can set one key-value pair at a time or bulk update keys and address values. The factory should use registry keys rather than accepting arbitrary protocol-controlled addresses from vault creators.
+
+The factory reads the Main Vault logic and Wrapped Token logic from the registry. The Wrapped Token logic is only required when the requested Base Asset has fewer than 18 decimals.
 
 ### Hooks
 

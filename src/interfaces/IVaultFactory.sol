@@ -22,6 +22,7 @@ interface IVaultFactory {
 
     struct RegistryKeys {
         bytes32 vault;
+        bytes32 wrappedToken;
     }
 
     struct FlexStrategyParams {
@@ -34,6 +35,7 @@ interface IVaultFactory {
     struct CreatedVault {
         address vault;
         address timelock;
+        address wrappedToken;
         address safeGuard;
         address flexStrategy;
     }
@@ -42,11 +44,12 @@ interface IVaultFactory {
         address indexed creator,
         address indexed vault,
         address indexed timelock,
+        address wrappedToken,
         address safeGuard,
         address flexStrategy
     );
 
-    error AssetDecimalsMismatch(uint8 decimals);
+    error AssetDecimalsTooHigh(uint8 decimals);
     error EmptyKey(bytes32 key);
     error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
+import {IERC20} from "src/interfaces/external/IERC20.sol";
 import {Registry} from "src/Registry.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
 
@@ -50,6 +51,8 @@ contract MockToken {
     mapping(address => mapping(address => uint256)) public allowance;
 
     constructor(uint8 decimals_) {
+        name = "Asset";
+        symbol = "AST";
         decimals = decimals_;
     }
 
@@ -167,8 +170,38 @@ contract MockVault {
     }
 }
 
+contract MockWrappedToken {
+    IERC20 public underlyingToken;
+    string public name;
+    string public symbol;
+    uint8 public decimals;
+    uint8 public decimalsOffset;
+    bool public initialized;
+
+    function initialize(
+        IERC20 underlyingToken_,
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        uint8 decimalsOffset_
+    ) external {
+        require(!initialized, "initialized");
+        initialized = true;
+        underlyingToken = underlyingToken_;
+        name = name_;
+        symbol = symbol_;
+        decimals = decimals_;
+        decimalsOffset = decimalsOffset_;
+    }
+
+    function asset() external view returns (address) {
+        return address(underlyingToken);
+    }
+}
+
 contract VaultFactoryTest is Test {
     bytes32 private constant VAULT_KEY = keccak256("VAULT");
+    bytes32 private constant WRAPPED_TOKEN_KEY = keccak256("WRAPPED_TOKEN");
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
     address private admin = address(0xA11CE);
@@ -184,6 +217,7 @@ contract VaultFactoryTest is Test {
     VaultFactory private factory;
     MockToken private asset;
     MockVault private vaultLogic;
+    MockWrappedToken private wrappedTokenLogic;
 
     function setUp() public {
         Registry registryLogic = new Registry();
@@ -194,8 +228,10 @@ contract VaultFactoryTest is Test {
         factory = new VaultFactory(registry);
         asset = new MockToken(18);
         vaultLogic = new MockVault();
+        wrappedTokenLogic = new MockWrappedToken();
 
         registry.setValue(VAULT_KEY, address(vaultLogic));
+        registry.setValue(WRAPPED_TOKEN_KEY, address(wrappedTokenLogic));
 
         asset.mint(creator, 1 ether);
     }
@@ -209,6 +245,7 @@ contract VaultFactoryTest is Test {
             factory.createVault(_vaultParams(1 ether), _registryKeys(), _emptyFlexParams());
         vm.stopPrank();
 
+        assertEq(created.wrappedToken, address(0));
         MockVault vault = MockVault(created.vault);
 
         assertEq(vault.tokenName(), "RWA Vault");
@@ -243,6 +280,41 @@ contract VaultFactoryTest is Test {
 
         address proxyAdmin = address(uint160(uint256(vm.load(created.vault, ERC1967_ADMIN_SLOT))));
         assertEq(IProxyAdminOwner(proxyAdmin).owner(), created.timelock);
+    }
+
+    function testCreateVaultWrapsNon18DecimalBaseAsset() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 1e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdc);
+        params.defaultAsset = address(usdc);
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 1e6);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        vm.stopPrank();
+
+        assertTrue(created.wrappedToken != address(0));
+
+        MockWrappedToken wrappedToken = MockWrappedToken(created.wrappedToken);
+        assertEq(wrappedToken.asset(), address(usdc));
+        assertEq(wrappedToken.name(), "Wrapped Asset");
+        assertEq(wrappedToken.symbol(), "WAST");
+        assertEq(wrappedToken.decimals(), 18);
+        assertEq(wrappedToken.decimalsOffset(), 12);
+
+        MockVault vault = MockVault(created.vault);
+        assertEq(vault.assets(0), created.wrappedToken);
+        assertTrue(vault.activeAsset(created.wrappedToken));
+        assertEq(vault.assets(1), address(usdc));
+        assertTrue(vault.activeAsset(address(usdc)));
+        assertEq(vault.defaultAssetIndex(), 1);
+        assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
+        assertEq(usdc.balanceOf(created.vault), 1e6);
+
+        address wrapperProxyAdmin = address(uint160(uint256(vm.load(created.wrappedToken, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(wrapperProxyAdmin).owner(), created.timelock);
     }
 
     function testCreateVaultWithFlexStrategyLeavesStrategyAndSafeGuardTodo() public {
@@ -293,7 +365,7 @@ contract VaultFactoryTest is Test {
     }
 
     function _registryKeys() internal pure returns (IVaultFactory.RegistryKeys memory) {
-        return IVaultFactory.RegistryKeys({vault: VAULT_KEY});
+        return IVaultFactory.RegistryKeys({vault: VAULT_KEY, wrappedToken: WRAPPED_TOKEN_KEY});
     }
 
     function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {

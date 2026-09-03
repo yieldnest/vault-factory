@@ -7,12 +7,20 @@ import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "src/interfaces/external/IERC20.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
+import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
     string public constant VERSION = "0.1.0";
     uint8 public constant VAULT_DECIMALS = 18;
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
+
+    struct Assets {
+        address baseAsset;
+        address defaultAsset;
+        uint256 defaultAssetIndex;
+        address wrappedToken;
+    }
 
     IRegistry public immutable REGISTRY;
 
@@ -30,14 +38,15 @@ contract VaultFactory is IVaultFactory {
 
         TimelockController timelock = _deployTimelock(params.admin, params.timelockDuration);
         address vaultLogic = _registryValue(keys.vault);
-        uint256 defaultAssetIndex = params.baseAsset == params.defaultAsset ? 0 : 1;
+        Assets memory assets = _prepareAssets(params, keys, address(timelock));
 
         created.timelock = address(timelock);
+        created.wrappedToken = assets.wrappedToken;
         created.vault = address(new UninitializedTransparentUpgradeableProxy(vaultLogic, address(timelock)));
 
         IVault vault = IVault(created.vault);
-        _initializeVault(vault, params, defaultAssetIndex);
-        _configureVault(vault, params, address(timelock), defaultAssetIndex);
+        _initializeVault(vault, params, assets.defaultAssetIndex);
+        _configureVault(vault, params, assets, address(timelock));
 
         if (flexParams.deployStrategy) {
             // TODO: Deploy and configure the flex strategy once its deployment API is finalized.
@@ -47,7 +56,9 @@ contract VaultFactory is IVaultFactory {
         _bootstrap(vault, params);
         _renounceTemporaryRoles(vault);
 
-        emit VaultCreated(msg.sender, created.vault, created.timelock, created.safeGuard, created.flexStrategy);
+        emit VaultCreated(
+            msg.sender, created.vault, created.timelock, created.wrappedToken, created.safeGuard, created.flexStrategy
+        );
     }
 
     function _initializeVault(IVault vault, VaultParams calldata params, uint256 defaultAssetIndex) internal {
@@ -74,13 +85,47 @@ contract VaultFactory is IVaultFactory {
         }
 
         if (params.bootstrapAmount == 0) revert ZeroAmount();
-        if (IERC20Metadata(params.baseAsset).decimals() != VAULT_DECIMALS) {
-            revert AssetDecimalsMismatch(IERC20Metadata(params.baseAsset).decimals());
+        if (IERC20Metadata(params.baseAsset).decimals() > VAULT_DECIMALS) {
+            revert AssetDecimalsTooHigh(IERC20Metadata(params.baseAsset).decimals());
         }
         if (params.baseAsset != params.defaultAsset && IERC20Metadata(params.defaultAsset).decimals() > VAULT_DECIMALS)
         {
             revert InvalidDefaultAsset();
         }
+    }
+
+    function _prepareAssets(VaultParams calldata params, RegistryKeys calldata keys, address timelock)
+        internal
+        returns (Assets memory assets)
+    {
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        assets.defaultAsset = params.defaultAsset;
+
+        if (baseAssetDecimals == VAULT_DECIMALS) {
+            assets.baseAsset = params.baseAsset;
+        } else {
+            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, keys.wrappedToken, timelock);
+            assets.baseAsset = assets.wrappedToken;
+        }
+
+        assets.defaultAssetIndex = assets.baseAsset == assets.defaultAsset ? 0 : 1;
+    }
+
+    function _deployWrappedToken(
+        address underlying,
+        uint8 underlyingDecimals,
+        bytes32 wrappedTokenKey,
+        address timelock
+    ) internal returns (address wrappedToken) {
+        wrappedToken = address(new UninitializedTransparentUpgradeableProxy(_registryValue(wrappedTokenKey), timelock));
+        IWrappedToken(wrappedToken)
+            .initialize(
+                IERC20(underlying),
+                _wrappedTokenName(underlying),
+                _wrappedTokenSymbol(underlying),
+                VAULT_DECIMALS,
+                VAULT_DECIMALS - underlyingDecimals
+            );
     }
 
     function _deployTimelock(address admin, uint256 timelockDuration) internal returns (TimelockController) {
@@ -93,7 +138,7 @@ contract VaultFactory is IVaultFactory {
         return new TimelockController(timelockDuration, proposers, executors, address(0));
     }
 
-    function _configureVault(IVault vault, VaultParams calldata params, address timelock, uint256 defaultAssetIndex)
+    function _configureVault(IVault vault, VaultParams calldata params, Assets memory assets, address timelock)
         internal
     {
         vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
@@ -115,9 +160,9 @@ contract VaultFactory is IVaultFactory {
         vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
         vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
 
-        vault.addAsset(params.baseAsset, true);
-        if (defaultAssetIndex == 1) {
-            vault.addAsset(params.defaultAsset, true);
+        vault.addAsset(assets.baseAsset, true);
+        if (assets.defaultAssetIndex == 1) {
+            vault.addAsset(assets.defaultAsset, true);
         }
         vault.setProvider(params.provider);
         vault.setBuffer(address(0));
@@ -150,5 +195,13 @@ contract VaultFactory is IVaultFactory {
 
     function _requireTrue(bool success) internal pure {
         if (!success) revert TokenCallFailed();
+    }
+
+    function _wrappedTokenName(address underlying) internal view returns (string memory) {
+        return string.concat("Wrapped ", IERC20Metadata(underlying).name());
+    }
+
+    function _wrappedTokenSymbol(address underlying) internal view returns (string memory) {
+        return string.concat("W", IERC20Metadata(underlying).symbol());
     }
 }
