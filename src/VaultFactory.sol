@@ -2,13 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "src/interfaces/external/IERC20.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
+import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
     string public constant VERSION = "0.1.0";
@@ -42,10 +42,10 @@ contract VaultFactory is IVaultFactory {
 
         created.timelock = address(timelock);
         created.wrappedToken = assets.wrappedToken;
-        created.vault =
-            address(new TransparentUpgradeableProxy(vaultLogic, address(timelock), _vaultInitData(params, assets)));
+        created.vault = address(new UninitializedTransparentUpgradeableProxy(vaultLogic, address(timelock)));
 
         IVault vault = IVault(created.vault);
+        _initializeVault(vault, params, assets);
         _configureVault(vault, params, assets, address(timelock));
 
         if (flexParams.deployStrategy) {
@@ -61,19 +61,16 @@ contract VaultFactory is IVaultFactory {
         );
     }
 
-    function _vaultInitData(VaultParams calldata params, Assets memory assets) internal view returns (bytes memory) {
-        return abi.encodeCall(
-            IVault.initialize,
-            (
-                address(this),
-                params.tokenName,
-                params.tokenSymbol,
-                VAULT_DECIMALS,
-                BASE_WITHDRAWAL_FEE,
-                params.countNativeAsset,
-                params.alwaysComputeTotalAssets,
-                assets.defaultAssetIndex
-            )
+    function _initializeVault(IVault vault, VaultParams calldata params, Assets memory assets) internal {
+        vault.initialize(
+            address(this),
+            params.tokenName,
+            params.tokenSymbol,
+            VAULT_DECIMALS,
+            BASE_WITHDRAWAL_FEE,
+            params.countNativeAsset,
+            params.alwaysComputeTotalAssets,
+            assets.defaultAssetIndex
         );
     }
 
@@ -120,24 +117,15 @@ contract VaultFactory is IVaultFactory {
         bytes32 wrappedTokenKey,
         address timelock
     ) internal returns (address wrappedToken) {
-        wrappedToken = address(
-            new TransparentUpgradeableProxy(
-                _registryValue(wrappedTokenKey), timelock, _wrappedTokenInitData(underlying, underlyingDecimals)
-            )
-        );
-    }
-
-    function _wrappedTokenInitData(address underlying, uint8 underlyingDecimals) internal view returns (bytes memory) {
-        return abi.encodeCall(
-            IWrappedToken.initialize,
-            (
+        wrappedToken = address(new UninitializedTransparentUpgradeableProxy(_registryValue(wrappedTokenKey), timelock));
+        IWrappedToken(wrappedToken)
+            .initialize(
                 IERC20(underlying),
                 _wrappedTokenName(underlying),
                 _wrappedTokenSymbol(underlying),
                 VAULT_DECIMALS,
                 VAULT_DECIMALS - underlyingDecimals
-            )
-        );
+            );
     }
 
     function _deployTimelock(address admin, uint256 timelockDuration) internal returns (TimelockController) {
