@@ -13,6 +13,7 @@ import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol
 import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {MinAmountRequestPolicy} from "src/MinAmountRequestPolicy.sol";
+import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
@@ -50,7 +51,7 @@ contract VaultFactory is IVaultFactory {
     ) external returns (CreatedVault memory created) {
         _validateVaultParams(params);
 
-        TimelockController timelock = _deployTimelock(params.admin, params.timelockDuration);
+        TimelockController timelock = TimelockDeployer.deploy(params.admin, params.timelockDuration);
         address vaultLogic = _registryValue(keys.vault);
         Assets memory assets = _prepareAssets(params, keys, address(timelock));
 
@@ -158,16 +159,6 @@ contract VaultFactory is IVaultFactory {
                 VAULT_DECIMALS,
                 VAULT_DECIMALS - underlyingDecimals
             );
-    }
-
-    function _deployTimelock(address admin, uint256 timelockDuration) internal returns (TimelockController) {
-        address[] memory proposers = new address[](1);
-        proposers[0] = admin;
-
-        address[] memory executors = new address[](1);
-        executors[0] = admin;
-
-        return new TimelockController(timelockDuration, proposers, executors, address(0));
     }
 
     function _configureVault(IVault vault, VaultParams calldata params, Assets memory assets, address timelock)
