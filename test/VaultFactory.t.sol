@@ -201,6 +201,8 @@ contract VaultFactoryTest is Test {
     }
 
     function testCreateVaultConfiguresMainVaultAndBootstraps() public {
+        assertEq(factory.VERSION(), "0.1.0");
+
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         IVaultFactory.CreatedVault memory created =

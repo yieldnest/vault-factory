@@ -10,6 +10,7 @@ import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
 
 contract VaultFactory is IVaultFactory {
+    string public constant VERSION = "0.1.0";
     uint8 public constant VAULT_DECIMALS = 18;
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
 
