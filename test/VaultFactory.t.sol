@@ -317,7 +317,7 @@ contract VaultFactoryTest is Test {
         assertEq(IProxyAdminOwner(wrapperProxyAdmin).owner(), created.timelock);
     }
 
-    function testCreateVaultWithFlexStrategyLeavesStrategyAndSafeGuardTodo() public {
+    function testCreateVaultRevertsWhenFlexStrategyRequested() public {
         bytes memory deployData = abi.encode("flex config");
         IVaultFactory.FlexStrategyParams memory flexParams = IVaultFactory.FlexStrategyParams({
             deployStrategy: true, multisig: address(0x5AFE), offRampAddress: address(0x0FF), deployData: deployData
@@ -325,12 +325,9 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
-        IVaultFactory.CreatedVault memory created =
-            factory.createVault(_vaultParams(1 ether), _registryKeys(), flexParams);
+        vm.expectRevert(IVaultFactory.FunctionalityUnavailable.selector);
+        factory.createVault(_vaultParams(1 ether), _registryKeys(), flexParams);
         vm.stopPrank();
-
-        assertEq(created.flexStrategy, address(0));
-        assertEq(created.safeGuard, address(0));
     }
 
     function testCreateVaultRevertsForMissingRegistryValue() public {

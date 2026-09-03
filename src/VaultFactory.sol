@@ -51,6 +51,7 @@ contract VaultFactory is IVaultFactory {
         if (flexParams.deployStrategy) {
             // TODO: Deploy and configure the flex strategy once its deployment API is finalized.
             // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
+            revert FunctionalityUnavailable();
         }
 
         _bootstrap(vault, params);

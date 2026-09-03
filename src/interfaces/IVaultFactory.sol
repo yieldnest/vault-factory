@@ -51,6 +51,7 @@ interface IVaultFactory {
 
     error AssetDecimalsTooHigh(uint8 decimals);
     error EmptyKey(bytes32 key);
+    error FunctionalityUnavailable();
     error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);
     error TokenCallFailed();
