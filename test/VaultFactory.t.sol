@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IERC20} from "src/interfaces/external/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Registry} from "src/Registry.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
 
@@ -74,6 +74,40 @@ contract MockToken {
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         return true;
+    }
+}
+
+// Mimics mainnet USDT: no return values, and non-zero approvals require a zero allowance first.
+contract MockUSDTToken {
+    string public name;
+    string public symbol;
+    uint8 public immutable decimals;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    constructor(uint8 decimals_) {
+        name = "Tether USD";
+        symbol = "USDT";
+        decimals = decimals_;
+    }
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external {
+        require(amount == 0 || allowance[msg.sender][spender] == 0, "reset allowance");
+        allowance[msg.sender][spender] = amount;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external {
+        uint256 currentAllowance = allowance[from][msg.sender];
+        require(currentAllowance >= amount, "allowance");
+        require(balanceOf[from] >= amount, "balance");
+
+        allowance[from][msg.sender] = currentAllowance - amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
     }
 }
 
@@ -163,7 +197,10 @@ contract MockVault {
     function deposit(uint256 amount, address receiver) external returns (uint256 shares) {
         require(!paused, "paused");
         address asset = assets[defaultAssetIndex];
-        MockToken(asset).transferFrom(msg.sender, address(this), amount);
+        // Tolerates no-return-data tokens like USDT, as the real vault's SafeERC20 usage does.
+        (bool success, bytes memory data) =
+            asset.call(abi.encodeCall(IERC20.transferFrom, (msg.sender, address(this), amount)));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "transfer");
         shareBalance[receiver] += amount;
         totalSupply += amount;
         return amount;
@@ -315,6 +352,25 @@ contract VaultFactoryTest is Test {
 
         address wrapperProxyAdmin = address(uint160(uint256(vm.load(created.wrappedToken, ERC1967_ADMIN_SLOT))));
         assertEq(IProxyAdminOwner(wrapperProxyAdmin).owner(), created.timelock);
+    }
+
+    function testCreateVaultBootstrapsWithNoReturnDataToken() public {
+        MockUSDTToken usdt = new MockUSDTToken(6);
+        usdt.mint(creator, 1e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdt);
+        params.defaultAsset = address(usdt);
+
+        vm.startPrank(creator);
+        usdt.approve(address(factory), 1e6);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _registryKeys(), _emptyFlexParams());
+        vm.stopPrank();
+
+        MockVault vault = MockVault(created.vault);
+        assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
+        assertEq(usdt.balanceOf(created.vault), 1e6);
+        assertEq(usdt.allowance(address(factory), created.vault), 0);
     }
 
     function testCreateVaultRevertsWhenFlexStrategyRequested() public {

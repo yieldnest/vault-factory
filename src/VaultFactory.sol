@@ -2,15 +2,18 @@
 pragma solidity ^0.8.24;
 
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IERC20} from "src/interfaces/external/IERC20.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 
 contract VaultFactory is IVaultFactory {
+    using SafeERC20 for IERC20;
+
     string public constant VERSION = "0.1.0";
     uint8 public constant VAULT_DECIMALS = 18;
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
@@ -173,11 +176,11 @@ contract VaultFactory is IVaultFactory {
 
     function _bootstrap(IVault vault, VaultParams calldata params) internal {
         IERC20 asset = IERC20(params.defaultAsset);
-        _requireTrue(asset.transferFrom(msg.sender, address(this), params.bootstrapAmount));
-        _requireTrue(asset.approve(address(vault), params.bootstrapAmount));
+        asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
+        asset.forceApprove(address(vault), params.bootstrapAmount);
         vault.unpause();
         vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
-        _requireTrue(asset.approve(address(vault), 0));
+        asset.forceApprove(address(vault), 0);
     }
 
     function _renounceTemporaryRoles(IVault vault) internal {
@@ -194,10 +197,6 @@ contract VaultFactory is IVaultFactory {
         if (key == bytes32(0)) revert EmptyKey(key);
         value = REGISTRY.valueOf(key);
         if (value == address(0)) revert MissingRegistryValue(key);
-    }
-
-    function _requireTrue(bool success) internal pure {
-        if (!success) revert TokenCallFailed();
     }
 
     function _wrappedTokenName(address underlying) internal view returns (string memory) {

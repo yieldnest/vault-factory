@@ -54,7 +54,6 @@ interface IVaultFactory {
     error FunctionalityUnavailable();
     error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);
-    error TokenCallFailed();
     error ZeroAddress();
     error ZeroAmount();
 
