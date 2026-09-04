@@ -532,6 +532,21 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
+    function testCreateVaultRevertsWhenBootstrapBelowOneUnit() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 1e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6 - 1);
+        params.baseAsset = address(usdc);
+        params.defaultAsset = address(usdc);
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 1e6);
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.BootstrapAmountTooLow.selector, 1e6 - 1, 1e6));
+        factory.createVault(params, _emptyFlexParams());
+        vm.stopPrank();
+    }
+
     function testCreateVaultRevertsWhen18DecimalBaseDiffersFromDefaultAsset() public {
         MockToken defaultAsset = new MockToken(18);
 

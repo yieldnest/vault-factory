@@ -45,11 +45,11 @@ interface IVaultFactory {
     event VaultCreated(address indexed creator, address indexed vault, address indexed timelock, CreatedVault created);
 
     error AssetDecimalsTooHigh(uint8 decimals);
+    error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
     error FunctionalityUnavailable();
     error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);
     error ZeroAddress();
-    error ZeroAmount();
 
     function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
         external

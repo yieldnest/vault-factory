@@ -242,3 +242,5 @@ The Main Vault and Flex Strategy (if added) need to be boostrapped with one unit
 Eg. 1 USDC (1e6 in wei), 1 USDT (1e6 in Wei), 1 SUSD, (1e18 in wei).
 
 The factory create call transfers the asset or assets away from the users.
+
+The factory enforces a minimum bootstrap amount of one unit of the default asset (10^decimals) and reverts below it.
