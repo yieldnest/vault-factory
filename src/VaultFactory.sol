@@ -34,13 +34,6 @@ contract VaultFactory is IVaultFactory {
         address wrappedToken;
     }
 
-    struct WithdrawalSystem {
-        address withdrawalRequest;
-        address withdrawer;
-        address bagFactory;
-        address requestPolicy;
-    }
-
     IRegistry public immutable REGISTRY;
 
     constructor(IRegistry registry) {
@@ -76,11 +69,19 @@ contract VaultFactory is IVaultFactory {
         _initializeVault(vault, params, assets);
         _configureVault(vault, assets, params, created.provider, address(timelock));
 
-        WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(vault, params, address(timelock));
+        WithdrawalSystem memory withdrawals = deployWithdrawalSystem(
+            created.vault,
+            address(timelock),
+            params.resolver,
+            params.pauser,
+            params.minWithdrawalAmount,
+            params.maxDataLength
+        );
         created.withdrawalRequest = withdrawals.withdrawalRequest;
         created.withdrawer = withdrawals.withdrawer;
         created.bagFactory = withdrawals.bagFactory;
         created.requestPolicy = withdrawals.requestPolicy;
+        vault.grantRole(vault.ASSET_WITHDRAWER_ROLE(), withdrawals.withdrawer);
 
         _bootstrap(vault, params);
         _renounceTemporaryRoles(vault);
@@ -194,10 +195,21 @@ contract VaultFactory is IVaultFactory {
         vault.setBuffer(address(0));
     }
 
-    function _deployWithdrawalSystem(IVault vault, VaultParams calldata params, address timelock)
-        internal
-        returns (WithdrawalSystem memory withdrawals)
-    {
+    /// @notice Deploys the async withdrawal system for a vault. Callable standalone for vaults
+    /// not created through this factory; the caller is then responsible for granting the returned
+    /// withdrawer the vault's ASSET_WITHDRAWER_ROLE (createVault does this itself).
+    function deployWithdrawalSystem(
+        address vault,
+        address timelock,
+        address resolver,
+        address pauser,
+        uint256 minWithdrawalAmount,
+        uint256 maxDataLength
+    ) public returns (WithdrawalSystem memory withdrawals) {
+        if (vault == address(0) || timelock == address(0) || resolver == address(0) || pauser == address(0)) {
+            revert ZeroAddress();
+        }
+
         // The withdrawal request proxy is deployed uninitialized first because the withdrawer and
         // the bag factory both need its address during their own initialization.
         withdrawals.withdrawalRequest = address(
@@ -206,28 +218,28 @@ contract VaultFactory is IVaultFactory {
 
         withdrawals.withdrawer =
             address(new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WITHDRAWER), timelock));
-        IWithdrawer(withdrawals.withdrawer).initialize(address(vault), withdrawals.withdrawalRequest);
+        IWithdrawer(withdrawals.withdrawer).initialize(vault, withdrawals.withdrawalRequest);
 
         withdrawals.bagFactory =
             address(new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.BAG_FACTORY), timelock));
         IBeaconProxyFactory(withdrawals.bagFactory)
             .initialize(_registryValue(RegistryKeys.BAG), timelock, withdrawals.withdrawalRequest, timelock);
 
-        withdrawals.requestPolicy = address(new MinAmountRequestPolicy(params.minWithdrawalAmount));
+        withdrawals.requestPolicy = address(new MinAmountRequestPolicy(minWithdrawalAmount));
 
         IWithdrawalRequest(withdrawals.withdrawalRequest).initialize(
-            address(vault),
+            vault,
             timelock,
-            params.resolver,
+            resolver,
             timelock,
-            params.pauser,
+            pauser,
             withdrawals.bagFactory,
             withdrawals.withdrawer,
             withdrawals.requestPolicy,
-            params.maxDataLength
+            maxDataLength
         );
 
-        vault.grantRole(vault.ASSET_WITHDRAWER_ROLE(), withdrawals.withdrawer);
+        emit WithdrawalSystemDeployed(vault, timelock, withdrawals);
     }
 
     function _bootstrap(IVault vault, VaultParams calldata params) internal {

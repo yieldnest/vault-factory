@@ -175,6 +175,8 @@ Because the buffer is 0, standard synchronous ERC4626 withdrawals are unavailabl
 
 The WithdrawalRequest, BaseWithdrawer, and BeaconProxyFactory implementations are read from the registry, together with the Bag implementation. Each of the three is deployed behind an OpenZeppelin Transparent Upgradeable Proxy whose `ProxyAdmin` is owned by the deployment timelock.
 
+The factory also exposes `deployWithdrawalSystem(vault, timelock, resolver, pauser, minWithdrawalAmount, maxDataLength)` publicly, so a withdrawal system can be deployed standalone for an existing vault. In that case the caller is responsible for granting the returned withdrawer the vault's `ASSET_WITHDRAWER_ROLE`; `createVault` performs that grant itself.
+
 Role assignment: the WithdrawalRequest default admin and configuration manager are the deployment timelock; the bag factory default admin and implementation manager are the deployment timelock; the bag factory creator is the WithdrawalRequest.
 
 Additional vault parameters:

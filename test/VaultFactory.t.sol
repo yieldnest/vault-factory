@@ -532,6 +532,33 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
+    function testDeployWithdrawalSystemStandalone() public {
+        address standaloneVault = address(0x5AB1);
+        address standaloneTimelock = address(0x71E1);
+
+        IVaultFactory.WithdrawalSystem memory ws =
+            factory.deployWithdrawalSystem(standaloneVault, standaloneTimelock, resolver, pauser, 1e17, 128);
+
+        MockWithdrawalRequest withdrawalRequest = MockWithdrawalRequest(ws.withdrawalRequest);
+        assertEq(withdrawalRequest.token(), standaloneVault);
+        assertEq(withdrawalRequest.defaultAdmin(), standaloneTimelock);
+        assertEq(withdrawalRequest.resolver(), resolver);
+        assertEq(withdrawalRequest.configurationManager(), standaloneTimelock);
+        assertEq(withdrawalRequest.pauser(), pauser);
+        assertEq(withdrawalRequest.bagFactory(), ws.bagFactory);
+        assertEq(withdrawalRequest.withdrawer(), ws.withdrawer);
+        assertEq(withdrawalRequest.requestPolicy(), ws.requestPolicy);
+        assertEq(withdrawalRequest.maxDataLength(), 128);
+
+        assertEq(MockWithdrawer(ws.withdrawer).token(), standaloneVault);
+        assertEq(MockWithdrawer(ws.withdrawer).withdrawalRequest(), ws.withdrawalRequest);
+        assertEq(MockBagFactory(ws.bagFactory).creator(), ws.withdrawalRequest);
+        assertEq(MinAmountRequestPolicy(ws.requestPolicy).minWithdrawalAmount(), 1e17);
+
+        address requestProxyAdmin = address(uint160(uint256(vm.load(ws.withdrawalRequest, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(requestProxyAdmin).owner(), standaloneTimelock);
+    }
+
     function testCreateVaultRevertsWhenBootstrapBelowOneUnit() public {
         MockToken usdc = new MockToken(6);
         usdc.mint(creator, 1e6);

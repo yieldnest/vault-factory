@@ -42,7 +42,17 @@ interface IVaultFactory {
         address flexStrategy;
     }
 
+    struct WithdrawalSystem {
+        address withdrawalRequest;
+        address withdrawer;
+        address bagFactory;
+        address requestPolicy;
+    }
+
     event VaultCreated(address indexed creator, address indexed vault, address indexed timelock, CreatedVault created);
+    event WithdrawalSystemDeployed(
+        address indexed vault, address indexed timelock, WithdrawalSystem withdrawalSystem
+    );
 
     error AssetDecimalsTooHigh(uint8 decimals);
     error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
@@ -54,4 +64,13 @@ interface IVaultFactory {
     function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
         external
         returns (CreatedVault memory created);
+
+    function deployWithdrawalSystem(
+        address vault,
+        address timelock,
+        address resolver,
+        address pauser,
+        uint256 minWithdrawalAmount,
+        uint256 maxDataLength
+    ) external returns (WithdrawalSystem memory withdrawals);
 }
