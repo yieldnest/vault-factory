@@ -11,7 +11,6 @@ interface IVaultFactory {
         address resolver;
         address baseAsset;
         address defaultAsset;
-        address provider;
         string tokenName;
         string tokenSymbol;
         bool countNativeAsset;
@@ -34,6 +33,7 @@ interface IVaultFactory {
         address vault;
         address timelock;
         address wrappedToken;
+        address provider;
         address withdrawalRequest;
         address withdrawer;
         address bagFactory;
@@ -42,18 +42,7 @@ interface IVaultFactory {
         address flexStrategy;
     }
 
-    event VaultCreated(
-        address indexed creator,
-        address indexed vault,
-        address indexed timelock,
-        address wrappedToken,
-        address withdrawalRequest,
-        address withdrawer,
-        address bagFactory,
-        address requestPolicy,
-        address safeGuard,
-        address flexStrategy
-    );
+    event VaultCreated(address indexed creator, address indexed vault, address indexed timelock, CreatedVault created);
 
     error AssetDecimalsTooHigh(uint8 decimals);
     error FunctionalityUnavailable();

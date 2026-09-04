@@ -9,6 +9,7 @@ import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/M
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
+import {BaseAssetProvider} from "yieldnest-vault/src/module/BaseAssetProvider.sol";
 
 interface IProxyAdminOwner {
     function owner() external view returns (address);
@@ -319,7 +320,6 @@ contract VaultFactoryTest is Test {
     address private unpauser = address(0xD00D);
     address private feeManager = address(0xFEE);
     address private resolver = address(0x2E50);
-    address private provider = address(0xF00D);
     address private bootstrapReceiver = address(0xB007);
     address private creator = address(0xC0DEC);
 
@@ -377,8 +377,13 @@ contract VaultFactoryTest is Test {
         assertFalse(vault.countNativeAsset());
         assertTrue(vault.alwaysComputeTotalAssets());
         assertFalse(vault.paused());
-        assertEq(vault.provider(), provider);
+        assertEq(vault.provider(), created.provider);
         assertEq(vault.buffer(), address(0));
+
+        BaseAssetProvider providerContract = BaseAssetProvider(created.provider);
+        assertEq(providerContract.baseAsset(), address(asset));
+        assertEq(providerContract.rate(), 1e18);
+        assertEq(providerContract.getRate(address(asset)), 1e18);
         assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
         assertEq(asset.balanceOf(created.vault), 1 ether);
 
@@ -474,6 +479,10 @@ contract VaultFactoryTest is Test {
         assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
         assertEq(usdc.balanceOf(created.vault), 1e6);
 
+        // The provider prices the default asset, not the zero-balance wrapper.
+        assertEq(BaseAssetProvider(created.provider).baseAsset(), address(usdc));
+        assertEq(BaseAssetProvider(created.provider).getRate(address(usdc)), 1e18);
+
         address wrapperProxyAdmin = address(uint160(uint256(vm.load(created.wrappedToken, ERC1967_ADMIN_SLOT))));
         assertEq(IProxyAdminOwner(wrapperProxyAdmin).owner(), created.timelock);
     }
@@ -546,7 +555,6 @@ contract VaultFactoryTest is Test {
             resolver: resolver,
             baseAsset: address(asset),
             defaultAsset: address(asset),
-            provider: provider,
             tokenName: "RWA Vault",
             tokenSymbol: "ynRWA",
             countNativeAsset: false,

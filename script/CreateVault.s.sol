@@ -20,7 +20,6 @@ contract CreateVault is Script {
 
     function run() external returns (IVaultFactory.CreatedVault memory created) {
         address factory = vm.promptAddress("VaultFactory address");
-        address provider = vm.promptAddress("Rate provider address");
 
         IVaultFactory.VaultParams memory params = IVaultFactory.VaultParams({
             admin: CONTROLLER,
@@ -31,7 +30,6 @@ contract CreateVault is Script {
             resolver: CONTROLLER,
             baseAsset: USDC,
             defaultAsset: USDC,
-            provider: provider,
             tokenName: "Whitelabel USDC RWA",
             tokenSymbol: "WLRWA",
             countNativeAsset: false,
@@ -58,6 +56,7 @@ contract CreateVault is Script {
         console2.log("Vault:", created.vault);
         console2.log("Timelock:", created.timelock);
         console2.log("Wrapped token:", created.wrappedToken);
+        console2.log("Provider:", created.provider);
         console2.log("Withdrawal request:", created.withdrawalRequest);
         console2.log("Withdrawer:", created.withdrawer);
         console2.log("Bag factory:", created.bagFactory);
@@ -67,6 +66,7 @@ contract CreateVault is Script {
         vm.serializeAddress(obj, "vault", created.vault);
         vm.serializeAddress(obj, "timelock", created.timelock);
         vm.serializeAddress(obj, "wrappedToken", created.wrappedToken);
+        vm.serializeAddress(obj, "provider", created.provider);
         vm.serializeAddress(obj, "withdrawalRequest", created.withdrawalRequest);
         vm.serializeAddress(obj, "withdrawer", created.withdrawer);
         vm.serializeAddress(obj, "bagFactory", created.bagFactory);

@@ -16,6 +16,7 @@ import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/M
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
+import {BaseAssetProvider} from "yieldnest-vault/src/module/BaseAssetProvider.sol";
 
 contract VaultFactory is IVaultFactory {
     using SafeERC20 for IERC20;
@@ -23,6 +24,8 @@ contract VaultFactory is IVaultFactory {
     string public constant VERSION = "0.1.0";
     uint8 public constant VAULT_DECIMALS = 18;
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
+    /// @notice 18-decimal base units per whole default-asset token, i.e. par.
+    uint256 public constant PROVIDER_RATE = 1e18;
 
     struct Assets {
         address baseAsset;
@@ -59,9 +62,19 @@ contract VaultFactory is IVaultFactory {
         created.wrappedToken = assets.wrappedToken;
         created.vault = address(new UninitializedTransparentUpgradeableProxy(vaultLogic, address(timelock)));
 
+        if (flexParams.deployStrategy) {
+            // TODO: Deploy and configure the flex strategy once its deployment API is finalized.
+            // TODO: Deploy the yieldnest-vault Provider wired to the wrapper and the flex strategy
+            // instead of the single-asset BaseAssetProvider.
+            // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
+            revert FunctionalityUnavailable();
+        }
+        // The wrapper never holds a balance, so only the default asset needs a rate.
+        created.provider = address(new BaseAssetProvider(assets.defaultAsset, PROVIDER_RATE));
+
         IVault vault = IVault(created.vault);
         _initializeVault(vault, params, assets);
-        _configureVault(vault, params, assets, address(timelock));
+        _configureVault(vault, assets, params, created.provider, address(timelock));
 
         WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(vault, params, address(timelock));
         created.withdrawalRequest = withdrawals.withdrawalRequest;
@@ -69,27 +82,10 @@ contract VaultFactory is IVaultFactory {
         created.bagFactory = withdrawals.bagFactory;
         created.requestPolicy = withdrawals.requestPolicy;
 
-        if (flexParams.deployStrategy) {
-            // TODO: Deploy and configure the flex strategy once its deployment API is finalized.
-            // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
-            revert FunctionalityUnavailable();
-        }
-
         _bootstrap(vault, params);
         _renounceTemporaryRoles(vault);
 
-        emit VaultCreated(
-            msg.sender,
-            created.vault,
-            created.timelock,
-            created.wrappedToken,
-            created.withdrawalRequest,
-            created.withdrawer,
-            created.bagFactory,
-            created.requestPolicy,
-            created.safeGuard,
-            created.flexStrategy
-        );
+        emit VaultCreated(msg.sender, created.vault, created.timelock, created);
     }
 
     function _initializeVault(IVault vault, VaultParams calldata params, Assets memory assets) internal {
@@ -110,7 +106,7 @@ contract VaultFactory is IVaultFactory {
             params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
                 || params.unpauser == address(0) || params.feeManager == address(0) || params.baseAsset == address(0)
                 || params.resolver == address(0) || params.defaultAsset == address(0)
-                || params.provider == address(0) || params.bootstrapReceiver == address(0)
+                || params.bootstrapReceiver == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -158,9 +154,13 @@ contract VaultFactory is IVaultFactory {
             );
     }
 
-    function _configureVault(IVault vault, VaultParams calldata params, Assets memory assets, address timelock)
-        internal
-    {
+    function _configureVault(
+        IVault vault,
+        Assets memory assets,
+        VaultParams calldata params,
+        address provider,
+        address timelock
+    ) internal {
         vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
         vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
         vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
@@ -184,7 +184,7 @@ contract VaultFactory is IVaultFactory {
         if (assets.defaultAssetIndex == 1) {
             vault.addAsset(assets.defaultAsset, true);
         }
-        vault.setProvider(params.provider);
+        vault.setProvider(provider);
         vault.setBuffer(address(0));
     }
 

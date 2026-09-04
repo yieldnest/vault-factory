@@ -8,7 +8,7 @@
   "lib/yieldnest-vault": {
     "branch": {
       "name": "rwa-max-vault",
-      "rev": "c4ae429faf8f0d53e598edf9e836032d56f85eba"
+      "rev": "9963297d9a986963a79a196339390428f947264d"
     }
   },
   "lib/yieldnest-vault-withdrawals": {

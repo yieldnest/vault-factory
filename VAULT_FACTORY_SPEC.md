@@ -68,6 +68,15 @@ If the base asset has 18 decimals, base asset and default asset must be the same
 
 
 
+### Rate Provider
+
+The factory deploys the vault's rate provider; vault creators do not supply one.
+
+- Without a flex strategy, the factory deploys the yieldnest-vault `BaseAssetProvider`, pricing the Default Asset at a fixed rate of 1e18 (par). The wrapper (when present) never holds a balance and is never priced.
+- With a flex strategy (future revision), the factory will instead deploy the yieldnest-vault `Provider`, wired to the wrapper and the strategy.
+
+Provider changes remain a critical timelocked operation.
+
 ### Vault Parameters
 
 These are the key parameters that are used when deploying a new RWA vault via the factory:
