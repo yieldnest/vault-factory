@@ -5,10 +5,16 @@
   "lib/openzeppelin-contracts-upgradeable": {
     "rev": "fffcb3c8ec0ad1ee559976f0b1709ae2fdc60702"
   },
+  "lib/yieldnest-vault": {
+    "branch": {
+      "name": "rwa-max-vault",
+      "rev": "c4ae429faf8f0d53e598edf9e836032d56f85eba"
+    }
+  },
   "lib/yieldnest-vault-withdrawals": {
-    "tag": {
-      "name": "v0.1.0",
-      "rev": "11f23e5691ec6725d8d18c2e0ad8ec9de1d1dedc"
+    "branch": {
+      "name": "main",
+      "rev": "bbb5ab238f2d458d235f11541bf8c34a53af6494"
     }
   }
 }
