@@ -8,6 +8,8 @@ optimizer_runs = 200
 # hijack our OpenZeppelin resolution to its own (older) vendored copy, so remappings are
 # maintained explicitly in remappings.txt instead of auto-detected.
 auto_detect_remappings = false
+# Deploy scripts write resulting addresses to deployments/<name>-<chainid>.json.
+fs_permissions = [{ access = "read-write", path = "deployments" }]
 
 [lint]
 ignore = ["lib/**"]
