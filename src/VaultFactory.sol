@@ -16,7 +16,7 @@ import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/M
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
-import {BaseAssetProvider} from "yieldnest-vault/src/module/BaseAssetProvider.sol";
+import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 
 contract VaultFactory is IVaultFactory {
     using SafeERC20 for IERC20;

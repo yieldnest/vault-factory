@@ -9,7 +9,7 @@ import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/M
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
-import {BaseAssetProvider} from "yieldnest-vault/src/module/BaseAssetProvider.sol";
+import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 
 interface IProxyAdminOwner {
     function owner() external view returns (address);
