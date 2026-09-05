@@ -7,6 +7,7 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
+import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {RegistryImplementations} from "script/RegistryImplementations.sol";
 
 contract DeployRegistry is Script {
@@ -18,17 +19,11 @@ contract DeployRegistry is Script {
 
         require(admin != address(0), "admin");
 
-        address[] memory proposers = new address[](1);
-        proposers[0] = admin;
-
-        address[] memory executors = new address[](1);
-        executors[0] = admin;
-
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
 
         implementation = new Registry();
-        timelock = new TimelockController(minDelay, proposers, executors, address(0));
+        timelock = TimelockDeployer.deployInline(admin, minDelay);
 
         // The deployer owns the registry just long enough to register the implementation
         // addresses; ownership moves to the timelock before the broadcast ends.

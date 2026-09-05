@@ -11,6 +11,13 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 /// factory.
 library TimelockDeployer {
     function deploy(address admin, uint256 timelockDuration) external returns (TimelockController) {
+        return deployInline(admin, timelockDuration);
+    }
+
+    /// @dev For forge scripts, which must use this internal (inlined) variant: a CREATE inside a
+    /// delegatecalled library is silently dropped from the broadcast, so the external `deploy`
+    /// would report success without ever deploying the timelock on-chain.
+    function deployInline(address admin, uint256 timelockDuration) internal returns (TimelockController) {
         address[] memory proposers = new address[](1);
         proposers[0] = admin;
 
