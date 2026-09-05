@@ -53,18 +53,14 @@ Once chosen this asset CANNOT BE CHANGED, without breaking all ERC4626 integrati
 
 ### Base Asset
 
-This is the Base Asset of the vault, in which all other assets in the vaults are denominated.
+This is the internal accounting asset of the vault, in which all other assets in the vault are denominated. The effective Base Asset used by the Main Vault MUST have 18 decimals.
 
-Eg. WETH, WBNB, SUDS. 
+Vault creators pass `baseAsset`. The factory derives both the ERC4626 Default Asset and the effective Base Asset from that one parameter:
 
-The effective Base Asset used by the Main Vault MUST have 18 decimals.
-
-If the requested Base Asset has fewer than 18 decimals, the factory deploys a Wrapped Token for that asset and uses the wrapper as the Main Vault's effective Base Asset. The wrapper is initialized with 18 decimals and a decimal offset of `18 - underlyingDecimals`.
+- If `baseAsset` has 18 decimals, the effective Base Asset and the ERC4626 Default Asset are both `baseAsset`.
+- If `baseAsset` has fewer than 18 decimals, the ERC4626 Default Asset is `baseAsset`; the factory deploys a Wrapped Token for `baseAsset` and uses that wrapper as the Main Vault's effective Base Asset. The wrapper is initialized with 18 decimals and a decimal offset of `18 - baseAssetDecimals`.
 
 The Wrapped Token is deployed behind the same OpenZeppelin Transparent Upgradeable Proxy pattern as the Main Vault. Its `ProxyAdmin` is owned by the same deployment timelock used for the Main Vault, so wrapper upgrades follow the same upgradeability rules.
-
-
-If the base asset has 18 decimals, base asset and default asset must be the same.
 
 
 

@@ -297,9 +297,12 @@ contract MockBagFactory {
     address public implementationManager;
     bool public initialized;
 
-    function initialize(address implementation_, address defaultAdmin_, address creator_, address implementationManager_)
-        external
-    {
+    function initialize(
+        address implementation_,
+        address defaultAdmin_,
+        address creator_,
+        address implementationManager_
+    ) external {
         require(!initialized, "initialized");
         initialized = true;
         implementation = implementation_;
@@ -364,8 +367,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
-        IVaultFactory.CreatedVault memory created =
-            factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
         vm.stopPrank();
 
         assertEq(created.wrappedToken, address(0));
@@ -454,7 +456,6 @@ contract VaultFactoryTest is Test {
 
         IVaultFactory.VaultParams memory params = _vaultParams(1e6);
         params.baseAsset = address(usdc);
-        params.defaultAsset = address(usdc);
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 1e6);
@@ -493,7 +494,6 @@ contract VaultFactoryTest is Test {
 
         IVaultFactory.VaultParams memory params = _vaultParams(1e6);
         params.baseAsset = address(usdt);
-        params.defaultAsset = address(usdt);
 
         vm.startPrank(creator);
         usdt.approve(address(factory), 1e6);
@@ -565,7 +565,6 @@ contract VaultFactoryTest is Test {
 
         IVaultFactory.VaultParams memory params = _vaultParams(1e6 - 1);
         params.baseAsset = address(usdc);
-        params.defaultAsset = address(usdc);
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 1e6);
@@ -574,15 +573,16 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
-    function testCreateVaultRevertsWhen18DecimalBaseDiffersFromDefaultAsset() public {
-        MockToken defaultAsset = new MockToken(18);
+    function testCreateVaultRevertsWhenDefaultAssetDecimalsTooHigh() public {
+        MockToken baseAsset = new MockToken(19);
 
         IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
-        params.defaultAsset = address(defaultAsset);
+        params.baseAsset = address(baseAsset);
 
         vm.startPrank(creator);
-        asset.approve(address(factory), 1 ether);
-        vm.expectRevert(IVaultFactory.InvalidDefaultAsset.selector);
+        baseAsset.mint(creator, 10 ether);
+        baseAsset.approve(address(factory), 10 ether);
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.AssetDecimalsTooHigh.selector, 19));
         factory.createVault(params, _emptyFlexParams());
         vm.stopPrank();
     }
@@ -596,7 +596,6 @@ contract VaultFactoryTest is Test {
             feeManager: feeManager,
             resolver: resolver,
             baseAsset: address(asset),
-            defaultAsset: address(asset),
             tokenName: "RWA Vault",
             tokenSymbol: "ynRWA",
             countNativeAsset: false,

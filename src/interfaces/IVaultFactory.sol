@@ -10,7 +10,6 @@ interface IVaultFactory {
         address feeManager;
         address resolver;
         address baseAsset;
-        address defaultAsset;
         string tokenName;
         string tokenSymbol;
         bool countNativeAsset;
@@ -50,14 +49,11 @@ interface IVaultFactory {
     }
 
     event VaultCreated(address indexed creator, address indexed vault, address indexed timelock, CreatedVault created);
-    event WithdrawalSystemDeployed(
-        address indexed vault, address indexed timelock, WithdrawalSystem withdrawalSystem
-    );
+    event WithdrawalSystemDeployed(address indexed vault, address indexed timelock, WithdrawalSystem withdrawalSystem);
 
     error AssetDecimalsTooHigh(uint8 decimals);
     error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
     error FunctionalityUnavailable();
-    error InvalidDefaultAsset();
     error MissingRegistryValue(bytes32 key);
     error ZeroAddress();
 

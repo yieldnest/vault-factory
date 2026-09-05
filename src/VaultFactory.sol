@@ -28,7 +28,7 @@ contract VaultFactory is IVaultFactory {
     uint256 public constant PROVIDER_RATE = 1e18;
 
     struct Assets {
-        address baseAsset;
+        address effectiveBaseAsset;
         address defaultAsset;
         uint256 defaultAssetIndex;
         address wrappedToken;
@@ -105,26 +105,15 @@ contract VaultFactory is IVaultFactory {
     function _validateVaultParams(VaultParams calldata params) internal view {
         if (
             params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
-                || params.unpauser == address(0) || params.feeManager == address(0) || params.baseAsset == address(0)
-                || params.resolver == address(0) || params.defaultAsset == address(0)
-                || params.bootstrapReceiver == address(0)
+                || params.unpauser == address(0) || params.feeManager == address(0) || params.resolver == address(0)
+                || params.baseAsset == address(0) || params.bootstrapReceiver == address(0)
         ) {
             revert ZeroAddress();
         }
 
         uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);
-        if (baseAssetDecimals == VAULT_DECIMALS && params.baseAsset != params.defaultAsset) {
-            revert InvalidDefaultAsset();
-        }
-
-        uint8 defaultAssetDecimals = baseAssetDecimals;
-        if (params.baseAsset != params.defaultAsset) {
-            defaultAssetDecimals = IERC20Metadata(params.defaultAsset).decimals();
-            if (defaultAssetDecimals > VAULT_DECIMALS) revert InvalidDefaultAsset();
-        }
-
-        uint256 minBootstrapAmount = 10 ** defaultAssetDecimals;
+        uint256 minBootstrapAmount = 10 ** baseAssetDecimals;
         if (params.bootstrapAmount < minBootstrapAmount) {
             revert BootstrapAmountTooLow(params.bootstrapAmount, minBootstrapAmount);
         }
@@ -132,16 +121,16 @@ contract VaultFactory is IVaultFactory {
 
     function _prepareAssets(VaultParams calldata params, address timelock) internal returns (Assets memory assets) {
         uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        assets.defaultAsset = params.defaultAsset;
+        assets.defaultAsset = params.baseAsset;
 
         if (baseAssetDecimals == VAULT_DECIMALS) {
-            assets.baseAsset = params.baseAsset;
+            assets.effectiveBaseAsset = params.baseAsset;
         } else {
             assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, timelock);
-            assets.baseAsset = assets.wrappedToken;
+            assets.effectiveBaseAsset = assets.wrappedToken;
         }
 
-        assets.defaultAssetIndex = assets.baseAsset == assets.defaultAsset ? 0 : 1;
+        assets.defaultAssetIndex = assets.effectiveBaseAsset == assets.defaultAsset ? 0 : 1;
     }
 
     function _deployWrappedToken(address underlying, uint8 underlyingDecimals, address timelock)
@@ -192,7 +181,7 @@ contract VaultFactory is IVaultFactory {
         vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
         vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
 
-        vault.addAsset(assets.baseAsset, true);
+        vault.addAsset(assets.effectiveBaseAsset, true);
         if (assets.defaultAssetIndex == 1) {
             vault.addAsset(assets.defaultAsset, true);
         }
@@ -232,23 +221,24 @@ contract VaultFactory is IVaultFactory {
 
         withdrawals.requestPolicy = address(new MinAmountRequestPolicy(minWithdrawalAmount));
 
-        IWithdrawalRequest(withdrawals.withdrawalRequest).initialize(
-            vault,
-            timelock,
-            resolver,
-            timelock,
-            pauser,
-            withdrawals.bagFactory,
-            withdrawals.withdrawer,
-            withdrawals.requestPolicy,
-            maxDataLength
-        );
+        IWithdrawalRequest(withdrawals.withdrawalRequest)
+            .initialize(
+                vault,
+                timelock,
+                resolver,
+                timelock,
+                pauser,
+                withdrawals.bagFactory,
+                withdrawals.withdrawer,
+                withdrawals.requestPolicy,
+                maxDataLength
+            );
 
         emit WithdrawalSystemDeployed(vault, timelock, withdrawals);
     }
 
     function _bootstrap(IVault vault, VaultParams calldata params) internal {
-        IERC20 asset = IERC20(params.defaultAsset);
+        IERC20 asset = IERC20(params.baseAsset);
         asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
         asset.forceApprove(address(vault), params.bootstrapAmount);
         vault.unpause();

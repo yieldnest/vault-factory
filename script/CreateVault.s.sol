@@ -32,7 +32,6 @@ contract CreateVault is Script {
             feeManager: CONTROLLER,
             resolver: CONTROLLER,
             baseAsset: USDC,
-            defaultAsset: USDC,
             tokenName: "Whitelabel USDC RWA",
             tokenSymbol: "WLRWA",
             countNativeAsset: false,
@@ -45,10 +44,7 @@ contract CreateVault is Script {
         });
 
         IVaultFactory.FlexStrategyParams memory flexParams = IVaultFactory.FlexStrategyParams({
-            deployStrategy: false,
-            multisig: address(0),
-            offRampAddress: address(0),
-            deployData: ""
+            deployStrategy: false, multisig: address(0), offRampAddress: address(0), deployData: ""
         });
 
         vm.startBroadcast();
