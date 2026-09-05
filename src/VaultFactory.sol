@@ -245,6 +245,12 @@ contract VaultFactory is IVaultFactory {
         asset.forceApprove(address(vault), params.bootstrapAmount);
         vault.unpause();
         uint256 shares = vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
+
+        // The vault address is CREATE-predictable before deployment, so it can be prefunded.
+        // With live accounting enabled, prefunded balances are included while totalSupply is still
+        // zero, which can dilute the bootstrap deposit down to fewer shares or even zero. The
+        // first mint must therefore match the exact 1:1 normalized amount expected for an empty
+        // vault configured with the factory's fixed par provider.
         if (shares != expectedShares) revert BootstrapSharesMismatch(shares, expectedShares);
         asset.forceApprove(address(vault), 0);
     }
