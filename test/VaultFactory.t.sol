@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/MinAmountRequestPolicy.sol";
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
@@ -115,6 +116,8 @@ contract MockUSDTToken {
 }
 
 contract MockVault {
+    uint8 public constant VAULT_DECIMALS = 18;
+
     bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant PROCESSOR_ROLE = keccak256("PROCESSOR_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
@@ -129,6 +132,7 @@ contract MockVault {
 
     mapping(bytes32 => mapping(address => bool)) public hasRole;
     mapping(address => bool) public activeAsset;
+    mapping(address => uint8) public assetDecimals;
     address[] public assets;
     mapping(address => uint256) public shareBalance;
 
@@ -183,6 +187,7 @@ contract MockVault {
     function addAsset(address asset, bool active) external onlyRole(ASSET_MANAGER_ROLE) {
         assets.push(asset);
         activeAsset[asset] = active;
+        assetDecimals[asset] = IERC20Metadata(asset).decimals();
     }
 
     function setProvider(address provider_) external onlyRole(PROVIDER_MANAGER_ROLE) {
@@ -198,16 +203,23 @@ contract MockVault {
         paused = false;
     }
 
-    function deposit(uint256 amount, address receiver) external returns (uint256 shares) {
+    function deposit(uint256 amount, address receiver) public virtual returns (uint256 shares) {
         require(!paused, "paused");
         address asset = assets[defaultAssetIndex];
+        shares = amount * 10 ** (VAULT_DECIMALS - assetDecimals[asset]);
         // Tolerates no-return-data tokens like USDT, as the real vault's SafeERC20 usage does.
         (bool success, bytes memory data) =
             asset.call(abi.encodeCall(IERC20.transferFrom, (msg.sender, address(this), amount)));
         require(success && (data.length == 0 || abi.decode(data, (bool))), "transfer");
-        shareBalance[receiver] += amount;
-        totalSupply += amount;
-        return amount;
+        shareBalance[receiver] += shares;
+        totalSupply += shares;
+    }
+}
+
+contract MockBadBootstrapVault is MockVault {
+    function deposit(uint256 amount, address receiver) public override returns (uint256 shares) {
+        shares = super.deposit(amount, receiver);
+        return shares / 2;
     }
 }
 
@@ -478,7 +490,7 @@ contract VaultFactoryTest is Test {
         assertEq(vault.assets(1), address(usdc));
         assertTrue(vault.activeAsset(address(usdc)));
         assertEq(vault.defaultAssetIndex(), 1);
-        assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
+        assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
         assertEq(usdc.balanceOf(created.vault), 1e6);
 
         assertEq(BaseAssetProvider(created.provider).baseAsset(), created.wrappedToken);
@@ -503,9 +515,20 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
 
         MockVault vault = MockVault(created.vault);
-        assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
+        assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
         assertEq(usdt.balanceOf(created.vault), 1e6);
         assertEq(usdt.allowance(address(factory), created.vault), 0);
+    }
+
+    function testCreateVaultRevertsWhenBootstrapSharesMismatch() public {
+        MockBadBootstrapVault badVaultLogic = new MockBadBootstrapVault();
+        registry.setValue(RegistryKeys.VAULT, address(badVaultLogic));
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.BootstrapSharesMismatch.selector, 0.5 ether, 1 ether));
+        factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
+        vm.stopPrank();
     }
 
     function testCreateVaultRevertsWhenFlexStrategyRequested() public {

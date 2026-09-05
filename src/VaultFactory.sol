@@ -238,10 +238,14 @@ contract VaultFactory is IVaultFactory {
 
     function _bootstrap(IVault vault, VaultParams calldata params) internal {
         IERC20 asset = IERC20(params.baseAsset);
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        uint256 expectedShares = params.bootstrapAmount * 10 ** (VAULT_DECIMALS - baseAssetDecimals);
+
         asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
         asset.forceApprove(address(vault), params.bootstrapAmount);
         vault.unpause();
-        vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
+        uint256 shares = vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
+        if (shares != expectedShares) revert BootstrapSharesMismatch(shares, expectedShares);
         asset.forceApprove(address(vault), 0);
     }
 

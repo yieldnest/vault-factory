@@ -52,6 +52,7 @@ interface IVaultFactory {
     event WithdrawalSystemDeployed(address indexed vault, address indexed timelock, WithdrawalSystem withdrawalSystem);
 
     error AssetDecimalsTooHigh(uint8 decimals);
+    error BootstrapSharesMismatch(uint256 actualShares, uint256 expectedShares);
     error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
     error FunctionalityUnavailable();
     error MissingRegistryValue(bytes32 key);
