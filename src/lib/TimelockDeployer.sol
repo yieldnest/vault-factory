@@ -17,6 +17,12 @@ library TimelockDeployer {
         address[] memory executors = new address[](1);
         executors[0] = admin;
 
-        return new TimelockController(timelockDuration, proposers, executors, address(0));
+        // The admin also receives the timelock's DEFAULT_ADMIN_ROLE. Role grants and revokes are
+        // immediate calls, not timelocked operations, so the admin can rewire the proposer,
+        // executor, and canceller sets (or hand off / renounce timelock control) without waiting
+        // out the delay. The delay only protects scheduled operations - upgrades, provider and
+        // asset changes - not the timelock's own membership. This trades the self-administered
+        // hardening OZ recommends for direct recoverability by the vault admin.
+        return new TimelockController(timelockDuration, proposers, executors, admin);
     }
 }
