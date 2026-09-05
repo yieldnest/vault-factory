@@ -6,6 +6,8 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {Registry} from "src/Registry.sol";
+import {RegistryKeys} from "src/lib/RegistryKeys.sol";
+import {RegistryImplementations} from "script/RegistryImplementations.sol";
 
 contract DeployRegistry is Script {
     function run() external returns (Registry implementation, TimelockController timelock, IRegistry registry) {
@@ -21,20 +23,30 @@ contract DeployRegistry is Script {
         executors[0] = admin;
 
         vm.startBroadcast();
+        (, address deployer,) = vm.readCallers();
 
         implementation = new Registry();
         timelock = new TimelockController(minDelay, proposers, executors, address(0));
 
-        bytes memory initData = abi.encodeCall(IRegistry.initialize, (address(timelock)));
+        // The deployer owns the registry just long enough to register the implementation
+        // addresses; ownership moves to the timelock before the broadcast ends.
+        bytes memory initData = abi.encodeCall(IRegistry.initialize, (deployer));
         TransparentUpgradeableProxy proxy =
             new TransparentUpgradeableProxy(address(implementation), address(timelock), initData);
         registry = IRegistry(address(proxy));
 
+        registry.setValues(_keys(), _values());
+        registry.transferOwnership(address(timelock));
+
         vm.stopBroadcast();
+
+        require(registry.owner() == address(timelock), "owner not timelock");
+        require(registry.valueOf(RegistryKeys.VAULT) == RegistryImplementations.VAULT_IMPLEMENTATION, "vault key");
 
         console2.log("Registry implementation:", address(implementation));
         console2.log("Registry proxy:", address(registry));
         console2.log("Registry timelock:", address(timelock));
+        console2.log("Registry owner:", registry.owner());
 
         string memory obj = "deployment";
         vm.serializeAddress(obj, "registryImplementation", address(implementation));
@@ -45,5 +57,25 @@ contract DeployRegistry is Script {
         string memory path = string.concat("deployments/registry-", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
         console2.log("Deployment written to:", path);
+    }
+
+    function _keys() internal pure returns (bytes32[] memory keys) {
+        keys = new bytes32[](6);
+        keys[0] = RegistryKeys.VAULT;
+        keys[1] = RegistryKeys.WRAPPED_TOKEN;
+        keys[2] = RegistryKeys.WITHDRAWAL_REQUEST;
+        keys[3] = RegistryKeys.WITHDRAWER;
+        keys[4] = RegistryKeys.BAG_FACTORY;
+        keys[5] = RegistryKeys.BAG;
+    }
+
+    function _values() internal pure returns (address[] memory values) {
+        values = new address[](6);
+        values[0] = RegistryImplementations.VAULT_IMPLEMENTATION;
+        values[1] = RegistryImplementations.WRAPPED_TOKEN_IMPLEMENTATION;
+        values[2] = RegistryImplementations.WITHDRAWAL_REQUEST_IMPLEMENTATION;
+        values[3] = RegistryImplementations.WITHDRAWER_IMPLEMENTATION;
+        values[4] = RegistryImplementations.BAG_FACTORY_IMPLEMENTATION;
+        values[5] = RegistryImplementations.BAG_IMPLEMENTATION;
     }
 }
