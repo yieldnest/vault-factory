@@ -6,6 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 
 contract CreateVault is Script {
+    bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
+
     /// @notice Receives every vault role, the timelock proposer/executor seat, and the bootstrap shares.
     address internal constant CONTROLLER = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
 
@@ -64,17 +66,27 @@ contract CreateVault is Script {
 
         string memory obj = "deployment";
         vm.serializeAddress(obj, "vault", created.vault);
+        vm.serializeAddress(obj, "vaultProxyAdmin", _proxyAdmin(created.vault));
         vm.serializeAddress(obj, "timelock", created.timelock);
         vm.serializeAddress(obj, "wrappedToken", created.wrappedToken);
+        vm.serializeAddress(obj, "wrappedTokenProxyAdmin", _proxyAdmin(created.wrappedToken));
         vm.serializeAddress(obj, "provider", created.provider);
         vm.serializeAddress(obj, "withdrawalRequest", created.withdrawalRequest);
+        vm.serializeAddress(obj, "withdrawalRequestProxyAdmin", _proxyAdmin(created.withdrawalRequest));
         vm.serializeAddress(obj, "withdrawer", created.withdrawer);
+        vm.serializeAddress(obj, "withdrawerProxyAdmin", _proxyAdmin(created.withdrawer));
         vm.serializeAddress(obj, "bagFactory", created.bagFactory);
+        vm.serializeAddress(obj, "bagFactoryProxyAdmin", _proxyAdmin(created.bagFactory));
         string memory json = vm.serializeAddress(obj, "requestPolicy", created.requestPolicy);
 
         vm.createDir("deployments", true);
         string memory path = string.concat("deployments/rwa-vault-", vm.toString(block.chainid), ".json");
         vm.writeJson(json, path);
         console2.log("Deployment written to:", path);
+    }
+
+    function _proxyAdmin(address proxy) internal view returns (address) {
+        if (proxy == address(0)) return address(0);
+        return address(uint160(uint256(vm.load(proxy, ERC1967_ADMIN_SLOT))));
     }
 }
