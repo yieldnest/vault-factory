@@ -62,8 +62,7 @@ contract VaultFactory is IVaultFactory {
             // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
             revert FunctionalityUnavailable();
         }
-        // The wrapper never holds a balance, so only the default asset needs a rate.
-        created.provider = address(new BaseAssetProvider(assets.defaultAsset, PROVIDER_RATE));
+        created.provider = address(new BaseAssetProvider(assets.effectiveBaseAsset, assets.defaultAsset, PROVIDER_RATE));
 
         IVault vault = IVault(created.vault);
         _initializeVault(vault, params, assets);

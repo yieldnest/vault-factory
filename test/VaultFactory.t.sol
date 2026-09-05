@@ -384,6 +384,7 @@ contract VaultFactoryTest is Test {
 
         BaseAssetProvider providerContract = BaseAssetProvider(created.provider);
         assertEq(providerContract.baseAsset(), address(asset));
+        assertEq(providerContract.defaultAsset(), address(asset));
         assertEq(providerContract.rate(), 1e18);
         assertEq(providerContract.getRate(address(asset)), 1e18);
         assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
@@ -480,8 +481,9 @@ contract VaultFactoryTest is Test {
         assertEq(vault.shareBalance(bootstrapReceiver), 1e6);
         assertEq(usdc.balanceOf(created.vault), 1e6);
 
-        // The provider prices the default asset, not the zero-balance wrapper.
-        assertEq(BaseAssetProvider(created.provider).baseAsset(), address(usdc));
+        assertEq(BaseAssetProvider(created.provider).baseAsset(), created.wrappedToken);
+        assertEq(BaseAssetProvider(created.provider).defaultAsset(), address(usdc));
+        assertEq(BaseAssetProvider(created.provider).getRate(created.wrappedToken), 1e18);
         assertEq(BaseAssetProvider(created.provider).getRate(address(usdc)), 1e18);
 
         address wrapperProxyAdmin = address(uint160(uint256(vm.load(created.wrappedToken, ERC1967_ADMIN_SLOT))));
