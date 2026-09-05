@@ -175,6 +175,11 @@ contract VaultFactory is IVaultFactory {
         vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
         vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
 
+        // IMPORTANT: the vault's DEFAULT_ADMIN_ROLE must be held by the timelock and nothing
+        // else. It is the role admin for every vault role, so this is what forces critical role
+        // updates (e.g. granting or revoking PROVIDER_MANAGER_ROLE or ASSET_MANAGER_ROLE) through
+        // a scheduled, delayed timelock operation. Granting it to any other account would let
+        // that account rewire vault roles instantly, bypassing the timelock entirely.
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), timelock);
         vault.grantRole(vault.PROCESSOR_ROLE(), params.processor);
         vault.grantRole(vault.PAUSER_ROLE(), params.pauser);

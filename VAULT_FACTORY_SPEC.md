@@ -135,6 +135,8 @@ The same timelock is also assigned wherever the deployment has critical protocol
 
 The factory must configure the timelock as the owner or role holder for these critical operations during deployment. Any temporary roles held by the factory or deployer for setup must be renounced or revoked before the deployment is considered complete.
 
+IMPORTANT: the Main Vault's `DEFAULT_ADMIN_ROLE` is assigned to the timelock and nothing else. It is the role admin for every vault role, so this is what makes critical role updates themselves timelocked (e.g. granting or revoking `PROVIDER_MANAGER_ROLE` or `ASSET_MANAGER_ROLE`): they can only happen through a scheduled, delayed timelock operation. Assigning it to any other account would allow instant role changes that bypass the timelock.
+
 ### Registry
 
 Factory deployment parameters refer to protocol-controlled addresses through a `Registry`.
