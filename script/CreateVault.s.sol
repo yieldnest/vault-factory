@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
+import {RegistryImplementations} from "script/RegistryImplementations.sol";
 
 contract CreateVault is Script {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
@@ -77,6 +78,7 @@ contract CreateVault is Script {
         vm.serializeAddress(obj, "withdrawerProxyAdmin", _proxyAdmin(created.withdrawer));
         vm.serializeAddress(obj, "bagFactory", created.bagFactory);
         vm.serializeAddress(obj, "bagFactoryProxyAdmin", _proxyAdmin(created.bagFactory));
+        vm.serializeAddress(obj, "withdrawalRequestViewer", RegistryImplementations.WITHDRAWAL_REQUEST_VIEWER);
         string memory json = vm.serializeAddress(obj, "requestPolicy", created.requestPolicy);
 
         vm.createDir("deployments", true);

@@ -8,6 +8,7 @@
   "vaultProxyAdmin": "0xDb78E00704b87cdA6C79476Fb8f31919858E4197",
   "withdrawalRequest": "0x8C5a18B9443548249a5196Ed4e1F9A74F49Fe892",
   "withdrawalRequestProxyAdmin": "0x3F8D59f06A67B3508b5ac85F308981bf1efece0a",
+  "withdrawalRequestViewer": "0xb4b0F22D8854Ff7ff3FE516829305AA445b7e8d6",
   "withdrawer": "0x9316A0DE48161Aef4247a67301b3c661438f0AfD",
   "withdrawerProxyAdmin": "0xe1f59757a356d36820A69Bd8856Fbb434571B9a4",
   "wrappedToken": "0xfa8980486cdEE39CA28F67D74Ba1c0CeD3F9Ec38",
