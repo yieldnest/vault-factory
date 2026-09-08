@@ -50,6 +50,7 @@ interface IVaultFactory {
 
     event VaultCreated(address indexed creator, address indexed vault, address indexed timelock, CreatedVault created);
     event WithdrawalSystemDeployed(address indexed vault, address indexed timelock, WithdrawalSystem withdrawalSystem);
+    event NonceAdvanced(address indexed caller, address marker);
 
     error AssetDecimalsTooHigh(uint8 decimals);
     error BootstrapSharesMismatch(uint256 actualShares, uint256 expectedShares);
@@ -70,4 +71,6 @@ interface IVaultFactory {
         uint256 minWithdrawalAmount,
         uint256 maxDataLength
     ) external returns (WithdrawalSystem memory withdrawals);
+
+    function advanceNonce() external returns (address marker);
 }

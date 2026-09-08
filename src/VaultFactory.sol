@@ -18,6 +18,8 @@ import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 
+contract NonceMarker {}
+
 contract VaultFactory is IVaultFactory {
     using SafeERC20 for IERC20;
 
@@ -86,6 +88,14 @@ contract VaultFactory is IVaultFactory {
         _renounceTemporaryRoles(vault);
 
         emit VaultCreated(msg.sender, created.vault, created.timelock, created);
+    }
+
+    /// @notice Advances the factory CREATE nonce without deploying a vault.
+    /// @dev Intended as an operational escape hatch if a future CREATE-derived vault address is
+    /// prefunded before createVault executes.
+    function advanceNonce() external returns (address marker) {
+        marker = address(new NonceMarker());
+        emit NonceAdvanced(msg.sender, marker);
     }
 
     function _initializeVault(IVault vault, VaultParams calldata params, Assets memory assets) internal {

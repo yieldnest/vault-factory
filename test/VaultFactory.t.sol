@@ -612,6 +612,15 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
+    function testAdvanceNonceDeploysMarkerAndAdvancesFactoryNonce() public {
+        uint64 nonceBefore = vm.getNonce(address(factory));
+
+        address marker = factory.advanceNonce();
+
+        assertEq(vm.getNonce(address(factory)), nonceBefore + 1);
+        assertGt(marker.code.length, 0);
+    }
+
     function _vaultParams(uint256 bootstrapAmount) internal view returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: admin,
