@@ -152,6 +152,10 @@ The registry keys used by the factory are fixed constants compiled into the fact
 - `yieldnest.yieldnest-vault-withdrawals.contracts.src.WithdrawalRequest`
 - `yieldnest.yieldnest-vault-withdrawals.contracts.src.withdrawers.BaseWithdrawer`
 - `yieldnest.yieldnest-vault-withdrawals.contracts.src.BeaconProxyFactory`
+- `yieldnest.yieldnest-flex-strategy.contracts.src.FlexStrategy`
+- `yieldnest.yieldnest-flex-strategy.contracts.src.AccountingModule`
+- `yieldnest.yieldnest-flex-strategy.contracts.src.factory.AccountingTokenFactory`
+- `yieldnest.yieldnest-flex-strategy.contracts.src.utils.RewardsSweeper`
 - `yieldnest.yieldnest-vault-withdrawals.contracts.src.Bag`
 
 ### Hooks
