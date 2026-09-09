@@ -913,6 +913,29 @@ contract VaultFactoryTest is Test {
         assertEq(IProxyAdminOwner(sweeperProxyAdmin).owner(), created.timelock);
     }
 
+    function testCreateVaultDeploysFlexStrategyWithoutRewardsSweeper() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 2e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdc);
+
+        IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
+        flexParams.deployRewardsSweeper = false;
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 2e6);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
+        vm.stopPrank();
+
+        assertEq(created.rewardsSweeper, address(0));
+        assertTrue(created.flexStrategy != address(0));
+
+        MockAccountingModule accountingModule = MockAccountingModule(created.accountingModule);
+        assertTrue(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), address(0xACC0)));
+        assertFalse(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), address(0)));
+    }
+
     function testCreateVaultFlexStrategyRequiresMultisigAndProcessor() public {
         IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
         flexParams.multisig = address(0);
@@ -1029,6 +1052,7 @@ contract VaultFactoryTest is Test {
     function _flexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {
         return IVaultFactory.FlexStrategyParams({
             deployStrategy: true,
+            deployRewardsSweeper: true,
             multisig: address(0x5AFE),
             offRampAddress: address(0x0FF),
             accountingProcessor: address(0xACC0),

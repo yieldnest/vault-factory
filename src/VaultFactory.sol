@@ -123,13 +123,16 @@ contract VaultFactory is IVaultFactory {
         cfg.baseAsset = params.baseAsset;
         cfg.baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         cfg.alwaysComputeTotalAssets = params.alwaysComputeTotalAssets;
+        cfg.deployRewardsSweeper = flexParams.deployRewardsSweeper;
         cfg.processor = params.processor;
         cfg.pauser = params.pauser;
         cfg.unpauser = params.unpauser;
         cfg.strategyLogic = _registryValue(RegistryKeys.FLEX_STRATEGY);
         cfg.accountingModuleLogic = _registryValue(RegistryKeys.ACCOUNTING_MODULE);
         cfg.accountingTokenFactory = _registryValue(RegistryKeys.ACCOUNTING_TOKEN_FACTORY);
-        cfg.rewardsSweeperLogic = _registryValue(RegistryKeys.REWARDS_SWEEPER);
+        if (flexParams.deployRewardsSweeper) {
+            cfg.rewardsSweeperLogic = _registryValue(RegistryKeys.REWARDS_SWEEPER);
+        }
         cfg.safe = flexParams.multisig;
         cfg.accountingProcessor = flexParams.accountingProcessor;
         cfg.targetApy = flexParams.targetApy;

@@ -23,6 +23,7 @@ interface IVaultFactory {
 
     struct FlexStrategyParams {
         bool deployStrategy;
+        bool deployRewardsSweeper;
         address multisig;
         address offRampAddress;
         address accountingProcessor;

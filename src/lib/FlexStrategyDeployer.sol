@@ -46,10 +46,12 @@ library FlexStrategyDeployer {
         address baseAsset;
         uint8 baseAssetDecimals;
         bool alwaysComputeTotalAssets;
+        bool deployRewardsSweeper;
         address processor;
         address pauser;
         address unpauser;
-        // implementations resolved from the registry
+        // implementations resolved from the registry; rewardsSweeperLogic is only set (and only
+        // required) when deployRewardsSweeper is true
         address strategyLogic;
         address accountingModuleLogic;
         address accountingTokenFactory;
@@ -154,9 +156,11 @@ library FlexStrategyDeployer {
                 ACCOUNTING_COOLDOWN_SECONDS
             );
 
-        sys.rewardsSweeper =
-            address(new UninitializedTransparentUpgradeableProxy(cfg.rewardsSweeperLogic, cfg.timelock));
-        IRewardsSweeper(sys.rewardsSweeper).initialize(address(this), address(this), sys.accountingModule);
+        if (cfg.deployRewardsSweeper) {
+            sys.rewardsSweeper =
+                address(new UninitializedTransparentUpgradeableProxy(cfg.rewardsSweeperLogic, cfg.timelock));
+            IRewardsSweeper(sys.rewardsSweeper).initialize(address(this), address(this), sys.accountingModule);
+        }
 
         sys.vaultProvider = address(new FlexProvider(cfg.effectiveBaseAsset, cfg.baseAsset, sys.strategy));
     }
@@ -213,14 +217,17 @@ library FlexStrategyDeployer {
         accountingModule.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
         accountingModule.grantRole(SAFE_MANAGER_ROLE, cfg.timelock);
         accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, cfg.accountingProcessor);
-        accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, sys.rewardsSweeper);
         accountingModule.grantRole(LOSS_PROCESSOR_ROLE, cfg.safe);
 
-        IRewardsSweeper rewardsSweeper = IRewardsSweeper(sys.rewardsSweeper);
-        rewardsSweeper.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
-        rewardsSweeper.grantRole(ACCOUNTING_MODULE_MANAGER_ROLE, cfg.timelock);
-        rewardsSweeper.grantRole(REWARDS_SWEEPER_ROLE, cfg.processor);
-        rewardsSweeper.grantRole(SNAPSHOT_REWARDS_SWEEPER_ROLE, cfg.processor);
+        if (sys.rewardsSweeper != address(0)) {
+            accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, sys.rewardsSweeper);
+
+            IRewardsSweeper rewardsSweeper = IRewardsSweeper(sys.rewardsSweeper);
+            rewardsSweeper.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
+            rewardsSweeper.grantRole(ACCOUNTING_MODULE_MANAGER_ROLE, cfg.timelock);
+            rewardsSweeper.grantRole(REWARDS_SWEEPER_ROLE, cfg.processor);
+            rewardsSweeper.grantRole(SNAPSHOT_REWARDS_SWEEPER_ROLE, cfg.processor);
+        }
     }
 
     function _renounceTemporaryRoles(FlexSystem memory sys) internal {
@@ -234,8 +241,11 @@ library FlexStrategyDeployer {
         IAccountingToken(sys.accountingToken).renounceRole(ACCOUNTING_MODULE_MANAGER_ROLE, address(this));
         IAccountingToken(sys.accountingToken).renounceRole(DEFAULT_ADMIN_ROLE, address(this));
         IAccountingModule(sys.accountingModule).renounceRole(DEFAULT_ADMIN_ROLE, address(this));
-        IRewardsSweeper(sys.rewardsSweeper).renounceRole(ACCOUNTING_MODULE_MANAGER_ROLE, address(this));
-        IRewardsSweeper(sys.rewardsSweeper).renounceRole(DEFAULT_ADMIN_ROLE, address(this));
+
+        if (sys.rewardsSweeper != address(0)) {
+            IRewardsSweeper(sys.rewardsSweeper).renounceRole(ACCOUNTING_MODULE_MANAGER_ROLE, address(this));
+            IRewardsSweeper(sys.rewardsSweeper).renounceRole(DEFAULT_ADMIN_ROLE, address(this));
+        }
     }
 
     function _uintRule() internal pure returns (IVault.ParamRule memory) {
