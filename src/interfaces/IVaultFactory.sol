@@ -25,7 +25,14 @@ interface IVaultFactory {
         bool deployStrategy;
         address multisig;
         address offRampAddress;
-        bytes deployData;
+        address accountingProcessor;
+        uint256 targetApy;
+        uint256 lowerBound;
+        uint256 minRewardableAssets;
+        string strategyName;
+        string strategySymbol;
+        string accountingTokenName;
+        string accountingTokenSymbol;
     }
 
     struct CreatedVault {
@@ -39,6 +46,9 @@ interface IVaultFactory {
         address requestPolicy;
         address safeGuard;
         address flexStrategy;
+        address accountingToken;
+        address accountingModule;
+        address rewardsSweeper;
     }
 
     struct WithdrawalSystem {
@@ -55,7 +65,6 @@ interface IVaultFactory {
     error AssetDecimalsTooHigh(uint8 decimals);
     error BootstrapSharesMismatch(uint256 actualShares, uint256 expectedShares);
     error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
-    error FunctionalityUnavailable();
     error MissingRegistryValue(bytes32 key);
     error ZeroAddress();
 

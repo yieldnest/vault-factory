@@ -125,10 +125,8 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
         });
     }
 
-    function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {
-        return IVaultFactory.FlexStrategyParams({
-            deployStrategy: false, multisig: address(0), offRampAddress: address(0), deployData: ""
-        });
+    function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory flexParams) {
+        flexParams.deployStrategy = false;
     }
 
     function _timelockUpgradeProxy(address proxy, address newImplementation, string memory label) internal {

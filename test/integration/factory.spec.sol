@@ -262,19 +262,29 @@ contract VaultFactoryIntegrationTest is Test {
         assertEq(IRequestPolicyView(created.requestPolicy).minWithdrawalAmount(), MIN_WITHDRAWAL_AMOUNT, "min request");
     }
 
-    function test_CreateVault_Reverts_When_Flex_Strategy_Requested() public {
-        IVaultFactory.FlexStrategyParams memory flexParams = IVaultFactory.FlexStrategyParams({
-            deployStrategy: true,
-            multisig: address(0x5AFE),
-            offRampAddress: address(0x0FF),
-            deployData: abi.encode("flex config")
-        });
+    function test_CreateVault_Flex_Strategy_Requires_Registered_Implementations() public {
+        IVaultFactory.FlexStrategyParams memory flexParams;
+        flexParams.deployStrategy = true;
+        flexParams.multisig = address(0x5AFE);
+        flexParams.offRampAddress = address(0x0FF);
+        flexParams.accountingProcessor = PROCESSOR;
+        flexParams.targetApy = 0.05e18;
+        flexParams.lowerBound = 0.01e18;
+        flexParams.minRewardableAssets = 100e6;
+        flexParams.strategyName = "Flex Strategy";
+        flexParams.strategySymbol = "FLEX";
+        flexParams.accountingTokenName = "Flex Accounting";
+        flexParams.accountingTokenSymbol = "aFLEX";
 
         deal(USDC, CREATOR, BOOTSTRAP_AMOUNT);
 
+        // This registry populates only the core keys, so the flex path must fail closed on the
+        // first missing flex implementation.
         vm.startPrank(CREATOR);
         IERC20(USDC).approve(address(factory), BOOTSTRAP_AMOUNT);
-        vm.expectRevert(IVaultFactory.FunctionalityUnavailable.selector);
+        vm.expectRevert(
+            abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.FLEX_STRATEGY)
+        );
         factory.createVault(_vaultParams(), flexParams);
         vm.stopPrank();
     }
@@ -329,10 +339,8 @@ contract VaultFactoryIntegrationTest is Test {
         });
     }
 
-    function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {
-        return IVaultFactory.FlexStrategyParams({
-            deployStrategy: false, multisig: address(0), offRampAddress: address(0), deployData: ""
-        });
+    function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory flexParams) {
+        flexParams.deployStrategy = false;
     }
 
     function _proxyAdminOwner(address proxy) internal view returns (address) {
