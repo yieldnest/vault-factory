@@ -179,12 +179,7 @@ contract VaultFactory is IVaultFactory {
         address provider,
         address timelock
     ) internal {
-        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
+        _grantTemporaryRoles(vault);
 
         // IMPORTANT: the vault's DEFAULT_ADMIN_ROLE must be held by the timelock and nothing
         // else. It is the role admin for every vault role, so this is what forces critical role
@@ -228,6 +223,17 @@ contract VaultFactory is IVaultFactory {
         // vault configured with the factory's fixed par provider.
         if (shares != expectedShares) revert BootstrapSharesMismatch(shares, expectedShares);
         asset.forceApprove(address(vault), 0);
+    }
+
+    /// @dev The factory's setup roles on the vault. DEFAULT_ADMIN_ROLE is not granted here - the
+    /// factory receives it in the vault initializer - but it is renounced below with the rest.
+    function _grantTemporaryRoles(IVault vault) internal {
+        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
     }
 
     function _renounceTemporaryRoles(IVault vault) internal {
