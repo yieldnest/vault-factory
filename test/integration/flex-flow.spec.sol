@@ -34,7 +34,8 @@ interface IAccountingModuleFlow {
 
 contract VaultFactoryFlexFlowIntegrationTest is Test {
     uint256 private constant BOOTSTRAP_AMOUNT = 1e6;
-    uint256 private constant DEPOSIT_AMOUNT = 2e6;
+    uint256 private constant MIN_DEPOSIT_AMOUNT = 1e6;
+    uint256 private constant MAX_DEPOSIT_AMOUNT = 1_000_000e6;
 
     IRegistry private registry;
     VaultFactory private factory;
@@ -59,7 +60,9 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         vm.stopPrank();
     }
 
-    function test_Flex_Deposit_Processor_Move_And_Guarded_OffRamp() public {
+    function testFuzz_Flex_Deposit_Processor_Move_And_Guarded_OffRamp(uint256 depositAmount) public {
+        depositAmount = bound(depositAmount, MIN_DEPOSIT_AMOUNT, MAX_DEPOSIT_AMOUNT);
+
         assertEq(IStrategyFlow(created.flexStrategy).hooks(), created.accountingModuleHook, "strategy hook");
         assertEq(IStrategyFlow(created.flexStrategy).accountingModule(), created.accountingModule, "accounting module");
         assertEq(IAccountingModuleFlow(created.accountingModule).safe(), address(safe), "accounting safe");
@@ -78,16 +81,14 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         );
         assertEq(IERC20(created.accountingToken).balanceOf(created.flexStrategy), BOOTSTRAP_AMOUNT, "bootstrap IOU");
 
-        deal(TestConstants.USDC, TestConstants.DEPOSITOR, DEPOSIT_AMOUNT);
+        deal(TestConstants.USDC, TestConstants.DEPOSITOR, depositAmount);
         vm.startPrank(TestConstants.DEPOSITOR);
-        IERC20(TestConstants.USDC).approve(created.vault, DEPOSIT_AMOUNT);
-        IVaultFlow(created.vault).deposit(DEPOSIT_AMOUNT, TestConstants.DEPOSITOR);
+        IERC20(TestConstants.USDC).approve(created.vault, depositAmount);
+        IVaultFlow(created.vault).deposit(depositAmount, TestConstants.DEPOSITOR);
         vm.stopPrank();
 
         assertEq(
-            IERC20(TestConstants.USDC).balanceOf(created.vault),
-            BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT,
-            "vault holds deposit"
+            IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + depositAmount, "vault holds deposit"
         );
         assertEq(
             IERC20(TestConstants.USDC).balanceOf(address(safe)),
@@ -95,30 +96,30 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             "safe unchanged before processor"
         );
 
-        _moveVaultAssetsToFlexStrategy(DEPOSIT_AMOUNT);
+        _moveVaultAssetsToFlexStrategy(depositAmount);
 
         assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault USDC allocated");
         assertEq(IERC20(TestConstants.USDC).balanceOf(created.flexStrategy), 0, "hook emptied strategy USDC");
         assertEq(
             IERC20(TestConstants.USDC).balanceOf(address(safe)),
-            safeBalanceAfterBootstrap + DEPOSIT_AMOUNT,
+            safeBalanceAfterBootstrap + depositAmount,
             "safe received processor allocation"
         );
         assertEq(
             IERC20(created.accountingToken).balanceOf(created.flexStrategy),
-            BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT,
+            BOOTSTRAP_AMOUNT + depositAmount,
             "accounting token minted to strategy"
         );
-        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT, "shares");
+        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), BOOTSTRAP_AMOUNT + depositAmount, "shares");
 
         SafeTestLib.execSingleOwnerSafeTransaction(
             safe,
             TestConstants.SAFE_OWNER,
             TestConstants.USDC,
-            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, DEPOSIT_AMOUNT))
+            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, depositAmount))
         );
 
-        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), DEPOSIT_AMOUNT, "off-ramp funded");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), depositAmount, "off-ramp funded");
         assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
     }
 
