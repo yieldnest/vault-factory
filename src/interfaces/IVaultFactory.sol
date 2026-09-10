@@ -46,6 +46,7 @@ interface IVaultFactory {
         address bagFactory;
         address requestPolicy;
         address safeGuard;
+        address accountingModuleHook;
         address flexStrategy;
         address accountingToken;
         address accountingModule;

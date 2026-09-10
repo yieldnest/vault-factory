@@ -384,6 +384,7 @@ contract MockFlexStrategy is MockAccessControl {
     address public baseAsset;
     address public accountingToken;
     address public provider;
+    address public hooks;
     bool public paused;
     bool public alwaysComputeTotalAssets;
     bool public hasAllocator;
@@ -425,6 +426,10 @@ contract MockFlexStrategy is MockAccessControl {
 
     function setAccountingModule(address accountingModule_) external onlyRole(ACCOUNTING_MODULE_MANAGER_ROLE) {
         accountingModule = accountingModule_;
+    }
+
+    function setHooks(address hooks_) external onlyRole(HOOKS_MANAGER_ROLE) {
+        hooks = hooks_;
     }
 
     function setProcessorRule(address target, bytes4 functionSig, IVaultTypes.FunctionRule calldata rule)
@@ -557,6 +562,29 @@ contract MockRewardsSweeper is MockAccessControl {
     }
 }
 
+contract MockAccountingModuleHook {
+    address public immutable VAULT;
+    address public immutable flexStrategy;
+
+    constructor(address vault_, address flexStrategy_) {
+        VAULT = vault_;
+        flexStrategy = flexStrategy_;
+    }
+}
+
+contract MockHooksDeployer {
+    address public lastVault;
+    address public lastFlexStrategy;
+    address public lastHook;
+
+    function deployAccountingModuleHook(address vault, address flexStrategy) external returns (address hook) {
+        lastVault = vault;
+        lastFlexStrategy = flexStrategy;
+        hook = address(new MockAccountingModuleHook(vault, flexStrategy));
+        lastHook = hook;
+    }
+}
+
 contract MockSafeGuard {
     bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
     bytes32 public constant PROCESSOR_MANAGER_ROLE = keccak256("PROCESSOR_MANAGER_ROLE");
@@ -639,6 +667,7 @@ contract VaultFactoryTest is Test {
     MockAccountingModule private accountingModuleLogic;
     MockAccountingTokenFactory private accountingTokenFactory;
     MockRewardsSweeper private rewardsSweeperLogic;
+    MockHooksDeployer private hooksDeployer;
     MockSafeGuard private safeGuardLogic;
 
     function setUp() public {
@@ -673,6 +702,8 @@ contract VaultFactoryTest is Test {
         registry.setValue(RegistryKeys.ACCOUNTING_MODULE, address(accountingModuleLogic));
         registry.setValue(RegistryKeys.ACCOUNTING_TOKEN_FACTORY, address(accountingTokenFactory));
         registry.setValue(RegistryKeys.REWARDS_SWEEPER, address(rewardsSweeperLogic));
+        hooksDeployer = new MockHooksDeployer();
+        registry.setValue(RegistryKeys.HOOKS_DEPLOYER, address(hooksDeployer));
         safeGuardLogic = new MockSafeGuard();
         registry.setValue(RegistryKeys.SAFE_GUARD, address(safeGuardLogic));
 
@@ -874,6 +905,12 @@ contract VaultFactoryTest is Test {
         assertEq(strategy.accountingModule(), created.accountingModule);
         assertFalse(strategy.paused());
         assertTrue(strategy.hasAllocator());
+        assertEq(strategy.hooks(), created.accountingModuleHook);
+        assertEq(hooksDeployer.lastVault(), created.flexStrategy);
+        assertEq(hooksDeployer.lastFlexStrategy(), created.flexStrategy);
+        assertEq(hooksDeployer.lastHook(), created.accountingModuleHook);
+        assertEq(MockAccountingModuleHook(created.accountingModuleHook).VAULT(), created.flexStrategy);
+        assertEq(MockAccountingModuleHook(created.accountingModuleHook).flexStrategy(), created.flexStrategy);
 
         // The vault provider prices the wrapper, the default asset, and the strategy.
         FlexProvider provider = FlexProvider(created.provider);
@@ -931,10 +968,12 @@ contract VaultFactoryTest is Test {
         assertTrue(strategy.hasRole(strategy.HOOKS_MANAGER_ROLE(), created.timelock));
         assertTrue(strategy.hasRole(strategy.ACCOUNTING_MODULE_MANAGER_ROLE(), created.timelock));
         assertTrue(strategy.hasRole(strategy.ALLOCATOR_ROLE(), created.vault));
+        assertTrue(strategy.hasRole(strategy.PROCESSOR_ROLE(), created.accountingModuleHook));
         assertFalse(strategy.hasRole(strategy.ALLOCATOR_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.PROCESSOR_MANAGER_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.ALLOCATOR_MANAGER_ROLE(), address(factory)));
+        assertFalse(strategy.hasRole(strategy.HOOKS_MANAGER_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.UNPAUSER_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.ACCOUNTING_MODULE_MANAGER_ROLE(), address(factory)));
 

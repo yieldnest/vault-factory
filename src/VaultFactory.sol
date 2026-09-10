@@ -81,6 +81,7 @@ contract VaultFactory is IVaultFactory {
             created.flexStrategy = flex.strategy;
             created.accountingToken = flex.accountingToken;
             created.accountingModule = flex.accountingModule;
+            created.accountingModuleHook = flex.accountingModuleHook;
             created.rewardsSweeper = flex.rewardsSweeper;
             created.provider = flex.vaultProvider;
         } else {
@@ -296,6 +297,7 @@ contract VaultFactory is IVaultFactory {
         cfg.strategyLogic = _registryValue(RegistryKeys.FLEX_STRATEGY);
         cfg.accountingModuleLogic = _registryValue(RegistryKeys.ACCOUNTING_MODULE);
         cfg.accountingTokenFactory = _registryValue(RegistryKeys.ACCOUNTING_TOKEN_FACTORY);
+        cfg.hooksDeployer = _registryValue(RegistryKeys.HOOKS_DEPLOYER);
         if (flexParams.deployRewardsSweeper) {
             cfg.rewardsSweeperLogic = _registryValue(RegistryKeys.REWARDS_SWEEPER);
         }

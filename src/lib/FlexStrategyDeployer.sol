@@ -5,6 +5,7 @@ import {IAccountingModule} from "src/interfaces/external/IAccountingModule.sol";
 import {IAccountingToken} from "src/interfaces/external/IAccountingToken.sol";
 import {IAccountingTokenFactory} from "src/interfaces/external/IAccountingTokenFactory.sol";
 import {IFlexStrategy} from "src/interfaces/external/IFlexStrategy.sol";
+import {IHooksDeployer} from "src/interfaces/external/IHooksDeployer.sol";
 import {IRewardsSweeper} from "src/interfaces/external/IRewardsSweeper.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
 import {FixedRateProvider} from "src/provider/FixedRateProvider.sol";
@@ -13,7 +14,7 @@ import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedT
 
 /// @title FlexStrategyDeployer
 /// @notice Deploys and wires the flex strategy system for a vault, mirroring the upstream
-/// yieldnest-flex-strategy FlexStrategyDeployer minus hooks and SafeGuard deployment.
+/// yieldnest-flex-strategy FlexStrategyDeployer minus SafeGuard deployment.
 /// @dev External library so the deployment logic and embedded creation code live outside the
 /// factory bytecode. The delegatecall runs in the factory's context: the factory is the temporary
 /// admin during wiring and renounces everything except the strategy ALLOCATOR_ROLE, which the
@@ -56,6 +57,7 @@ library FlexStrategyDeployer {
         address accountingModuleLogic;
         address accountingTokenFactory;
         address rewardsSweeperLogic;
+        address hooksDeployer;
         // flex parameters
         address safe;
         address accountingProcessor;
@@ -72,6 +74,7 @@ library FlexStrategyDeployer {
         address strategy;
         address accountingToken;
         address accountingModule;
+        address accountingModuleHook;
         address rewardsSweeper;
         address strategyRateProvider;
         address vaultProvider;
@@ -171,6 +174,7 @@ library FlexStrategyDeployer {
         // with the factory until the strategy bootstrap deposit is done.
         strategy.grantRole(PROCESSOR_MANAGER_ROLE, address(this));
         strategy.grantRole(ALLOCATOR_MANAGER_ROLE, address(this));
+        strategy.grantRole(HOOKS_MANAGER_ROLE, address(this));
         strategy.grantRole(UNPAUSER_ROLE, address(this));
         strategy.grantRole(ALLOCATOR_ROLE, address(this));
 
@@ -191,6 +195,10 @@ library FlexStrategyDeployer {
         strategy.grantRole(ALLOCATOR_ROLE, cfg.vault);
 
         strategy.setAccountingModule(sys.accountingModule);
+        sys.accountingModuleHook =
+            IHooksDeployer(cfg.hooksDeployer).deployAccountingModuleHook(sys.strategy, sys.strategy);
+        strategy.setHooks(sys.accountingModuleHook);
+        strategy.grantRole(PROCESSOR_ROLE, sys.accountingModuleHook);
 
         // The strategy's processor may only move funds through the accounting module, and
         // withdrawals may only land back on the strategy.
@@ -233,6 +241,7 @@ library FlexStrategyDeployer {
         IFlexStrategy strategy = IFlexStrategy(sys.strategy);
         strategy.renounceRole(PROCESSOR_MANAGER_ROLE, address(this));
         strategy.renounceRole(ALLOCATOR_MANAGER_ROLE, address(this));
+        strategy.renounceRole(HOOKS_MANAGER_ROLE, address(this));
         strategy.renounceRole(UNPAUSER_ROLE, address(this));
         strategy.renounceRole(ACCOUNTING_MODULE_MANAGER_ROLE, address(this));
         strategy.renounceRole(DEFAULT_ADMIN_ROLE, address(this));
