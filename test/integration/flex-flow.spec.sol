@@ -11,6 +11,7 @@ import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
 import {RegistryImplementations} from "script/RegistryImplementations.sol";
 import {SafeTestLib} from "test/lib/SafeTestLib.sol";
+import {TestConstants} from "test/lib/TestConstants.sol";
 import {ISafe} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/ISafe.sol";
 import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/IGuardManager.sol";
 
@@ -32,19 +33,6 @@ interface IAccountingModuleFlow {
 }
 
 contract VaultFactoryFlexFlowIntegrationTest is Test {
-    address private constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address private constant ADMIN = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
-    address private constant PROCESSOR = 0x1000000000000000000000000000000000000001;
-    address private constant PAUSER = 0x1000000000000000000000000000000000000002;
-    address private constant UNPAUSER = 0x1000000000000000000000000000000000000003;
-    address private constant FEE_MANAGER = 0x1000000000000000000000000000000000000004;
-    address private constant RESOLVER = 0x1000000000000000000000000000000000000005;
-    address private constant BOOTSTRAP_RECEIVER = 0x1000000000000000000000000000000000000006;
-    address private constant CREATOR = 0x1000000000000000000000000000000000000007;
-    address private constant DEPOSITOR = 0x1000000000000000000000000000000000000008;
-    address private constant OFF_RAMP = 0x1000000000000000000000000000000000000009;
-    address private constant SAFE_OWNER = 0x1000000000000000000000000000000000000010;
-
     uint256 private constant BOOTSTRAP_AMOUNT = 1e6;
     uint256 private constant DEPOSIT_AMOUNT = 2e6;
 
@@ -61,12 +49,12 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         registry = _deployRegistry();
         _populateRegistry();
         factory = new VaultFactory(registry);
-        safe = SafeTestLib.deploySingleOwnerSafe(SAFE_OWNER);
+        safe = SafeTestLib.deploySingleOwnerSafe(TestConstants.SAFE_OWNER);
 
-        deal(USDC, CREATOR, BOOTSTRAP_AMOUNT * 2);
+        deal(TestConstants.USDC, TestConstants.CREATOR, BOOTSTRAP_AMOUNT * 2);
 
-        vm.startPrank(CREATOR);
-        IERC20(USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
+        vm.startPrank(TestConstants.CREATOR);
+        IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
         created = factory.createVault(_vaultParams(), _flexParams(address(safe)));
         vm.stopPrank();
     }
@@ -77,29 +65,42 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IAccountingModuleFlow(created.accountingModule).safe(), address(safe), "accounting safe");
 
         SafeTestLib.execSingleOwnerSafeTransaction(
-            safe, SAFE_OWNER, address(safe), abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
         );
 
-        uint256 safeBalanceAfterBootstrap = IERC20(USDC).balanceOf(address(safe));
+        uint256 safeBalanceAfterBootstrap = IERC20(TestConstants.USDC).balanceOf(address(safe));
         assertEq(safeBalanceAfterBootstrap, BOOTSTRAP_AMOUNT, "bootstrap moved to safe");
-        assertEq(IERC20(USDC).balanceOf(created.flexStrategy), 0, "strategy does not custody USDC after hook");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(created.flexStrategy), 0, "strategy does not custody USDC after hook"
+        );
         assertEq(IERC20(created.accountingToken).balanceOf(created.flexStrategy), BOOTSTRAP_AMOUNT, "bootstrap IOU");
 
-        deal(USDC, DEPOSITOR, DEPOSIT_AMOUNT);
-        vm.startPrank(DEPOSITOR);
-        IERC20(USDC).approve(created.vault, DEPOSIT_AMOUNT);
-        IVaultFlow(created.vault).deposit(DEPOSIT_AMOUNT, DEPOSITOR);
+        deal(TestConstants.USDC, TestConstants.DEPOSITOR, DEPOSIT_AMOUNT);
+        vm.startPrank(TestConstants.DEPOSITOR);
+        IERC20(TestConstants.USDC).approve(created.vault, DEPOSIT_AMOUNT);
+        IVaultFlow(created.vault).deposit(DEPOSIT_AMOUNT, TestConstants.DEPOSITOR);
         vm.stopPrank();
 
-        assertEq(IERC20(USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT, "vault holds deposit");
-        assertEq(IERC20(USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe unchanged before processor");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(created.vault),
+            BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT,
+            "vault holds deposit"
+        );
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceAfterBootstrap,
+            "safe unchanged before processor"
+        );
 
         _moveVaultAssetsToFlexStrategy(DEPOSIT_AMOUNT);
 
-        assertEq(IERC20(USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault USDC allocated");
-        assertEq(IERC20(USDC).balanceOf(created.flexStrategy), 0, "hook emptied strategy USDC");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault USDC allocated");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.flexStrategy), 0, "hook emptied strategy USDC");
         assertEq(
-            IERC20(USDC).balanceOf(address(safe)),
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
             safeBalanceAfterBootstrap + DEPOSIT_AMOUNT,
             "safe received processor allocation"
         );
@@ -111,16 +112,19 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), BOOTSTRAP_AMOUNT + DEPOSIT_AMOUNT, "shares");
 
         SafeTestLib.execSingleOwnerSafeTransaction(
-            safe, SAFE_OWNER, USDC, abi.encodeCall(IERC20.transfer, (OFF_RAMP, DEPOSIT_AMOUNT))
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, DEPOSIT_AMOUNT))
         );
 
-        assertEq(IERC20(USDC).balanceOf(OFF_RAMP), DEPOSIT_AMOUNT, "off-ramp funded");
-        assertEq(IERC20(USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), DEPOSIT_AMOUNT, "off-ramp funded");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
     }
 
     function _moveVaultAssetsToFlexStrategy(uint256 amount) internal {
         address[] memory targets = new address[](2);
-        targets[0] = USDC;
+        targets[0] = TestConstants.USDC;
         targets[1] = created.flexStrategy;
 
         uint256[] memory values = new uint256[](2);
@@ -129,7 +133,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         data[0] = abi.encodeCall(IERC20.approve, (created.flexStrategy, amount));
         data[1] = abi.encodeWithSignature("deposit(uint256,address)", amount, created.vault);
 
-        vm.prank(PROCESSOR);
+        vm.prank(TestConstants.PROCESSOR);
         IVaultFlow(created.vault).processor(targets, values, data);
     }
 
@@ -175,13 +179,13 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
 
     function _vaultParams() internal pure returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
-            admin: ADMIN,
-            processor: PROCESSOR,
-            pauser: PAUSER,
-            unpauser: UNPAUSER,
-            feeManager: FEE_MANAGER,
-            resolver: RESOLVER,
-            baseAsset: USDC,
+            admin: TestConstants.ADMIN,
+            processor: TestConstants.PROCESSOR,
+            pauser: TestConstants.PAUSER,
+            unpauser: TestConstants.UNPAUSER,
+            feeManager: TestConstants.FEE_MANAGER,
+            resolver: TestConstants.RESOLVER,
+            baseAsset: TestConstants.USDC,
             tokenName: "Whitelabel Flex USDC",
             tokenSymbol: "WLFUSDC",
             countNativeAsset: false,
@@ -190,7 +194,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             minWithdrawalAmount: 0.1 ether,
             maxDataLength: 256,
             bootstrapAmount: BOOTSTRAP_AMOUNT,
-            bootstrapReceiver: BOOTSTRAP_RECEIVER
+            bootstrapReceiver: TestConstants.BOOTSTRAP_RECEIVER
         });
     }
 
@@ -199,8 +203,8 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             deployStrategy: true,
             deployRewardsSweeper: true,
             multisig: multisig,
-            offRampAddress: OFF_RAMP,
-            accountingProcessor: PROCESSOR,
+            offRampAddress: TestConstants.OFF_RAMP,
+            accountingProcessor: TestConstants.PROCESSOR,
             targetApy: 0.05e18,
             lowerBound: 0.01e18,
             minRewardableAssets: 100e6,
