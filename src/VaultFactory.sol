@@ -204,7 +204,8 @@ contract VaultFactory is IVaultFactory {
         // (the 18-decimal, no-wrapper case), which must accept deposits. A wrapper is an
         // accounting-only denominator and MUST NOT be depositable into the vault; only the
         // default asset takes deposits.
-        vault.addAsset(assets.effectiveBaseAsset, assets.defaultAssetIndex == 0);
+        bool effectiveBaseAssetIsDefaultAsset = assets.defaultAssetIndex == 0;
+        vault.addAsset(assets.effectiveBaseAsset, effectiveBaseAssetIsDefaultAsset);
         if (assets.defaultAssetIndex == 1) {
             vault.addAsset(assets.defaultAsset, true);
         }
