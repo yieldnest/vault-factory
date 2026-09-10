@@ -22,6 +22,8 @@ contract NonceMarker {}
 contract VaultFactory is IVaultFactory {
     using SafeERC20 for IERC20;
 
+    /// STORAGE ///
+
     string public constant VERSION = "0.1.0";
     uint8 public constant VAULT_DECIMALS = 18;
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
@@ -37,10 +39,14 @@ contract VaultFactory is IVaultFactory {
 
     IRegistry public immutable REGISTRY;
 
+    /// CONSTRUCTOR ///
+
     constructor(IRegistry registry) {
         if (address(registry) == address(0)) revert ZeroAddress();
         REGISTRY = registry;
     }
+
+    /// VAULT CREATION ///
 
     function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
         external
@@ -105,6 +111,137 @@ contract VaultFactory is IVaultFactory {
         emit VaultCreated(msg.sender, created.vault, created.timelock, created);
     }
 
+    function _validateVaultParams(VaultParams calldata params) internal view {
+        if (
+            params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
+                || params.unpauser == address(0) || params.feeManager == address(0) || params.resolver == address(0)
+                || params.baseAsset == address(0) || params.bootstrapReceiver == address(0)
+        ) {
+            revert ZeroAddress();
+        }
+
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);
+        uint256 minBootstrapAmount = 10 ** baseAssetDecimals;
+        if (params.bootstrapAmount < minBootstrapAmount) {
+            revert BootstrapAmountTooLow(params.bootstrapAmount, minBootstrapAmount);
+        }
+    }
+
+    function _prepareAssets(VaultParams calldata params, address timelock) internal returns (Assets memory assets) {
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        assets.defaultAsset = params.baseAsset;
+
+        if (baseAssetDecimals == VAULT_DECIMALS) {
+            assets.effectiveBaseAsset = params.baseAsset;
+        } else {
+            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, timelock);
+            assets.effectiveBaseAsset = assets.wrappedToken;
+        }
+
+        assets.defaultAssetIndex = assets.effectiveBaseAsset == assets.defaultAsset ? 0 : 1;
+    }
+
+    function _deployWrappedToken(address underlying, uint8 underlyingDecimals, address timelock)
+        internal
+        returns (address wrappedToken)
+    {
+        wrappedToken = address(
+            new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WRAPPED_TOKEN), timelock)
+        );
+        IWrappedToken(wrappedToken)
+            .initialize(
+                IERC20(underlying),
+                _wrappedTokenName(underlying),
+                _wrappedTokenSymbol(underlying),
+                VAULT_DECIMALS,
+                VAULT_DECIMALS - underlyingDecimals
+            );
+    }
+
+    function _initializeVault(IVault vault, VaultParams calldata params, Assets memory assets) internal {
+        vault.initialize(
+            address(this),
+            params.tokenName,
+            params.tokenSymbol,
+            VAULT_DECIMALS,
+            BASE_WITHDRAWAL_FEE,
+            params.countNativeAsset,
+            params.alwaysComputeTotalAssets,
+            assets.defaultAssetIndex
+        );
+    }
+
+    function _configureVault(
+        IVault vault,
+        Assets memory assets,
+        VaultParams calldata params,
+        address provider,
+        address timelock
+    ) internal {
+        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
+        vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
+
+        // IMPORTANT: the vault's DEFAULT_ADMIN_ROLE must be held by the timelock and nothing
+        // else. It is the role admin for every vault role, so this is what forces critical role
+        // updates (e.g. granting or revoking PROVIDER_MANAGER_ROLE or ASSET_MANAGER_ROLE) through
+        // a scheduled, delayed timelock operation. Granting it to any other account would let
+        // that account rewire vault roles instantly, bypassing the timelock entirely.
+        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), timelock);
+        vault.grantRole(vault.PROCESSOR_ROLE(), params.processor);
+        vault.grantRole(vault.PAUSER_ROLE(), params.pauser);
+        vault.grantRole(vault.UNPAUSER_ROLE(), params.unpauser);
+        vault.grantRole(vault.FEE_MANAGER_ROLE(), params.feeManager);
+
+        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), timelock);
+        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), timelock);
+        vault.grantRole(vault.ASSET_MANAGER_ROLE(), timelock);
+        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
+        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
+
+        vault.addAsset(assets.effectiveBaseAsset, true);
+        if (assets.defaultAssetIndex == 1) {
+            vault.addAsset(assets.defaultAsset, true);
+        }
+        vault.setProvider(provider);
+        vault.setBuffer(address(0));
+    }
+
+    function _bootstrap(IVault vault, VaultParams calldata params) internal {
+        IERC20 asset = IERC20(params.baseAsset);
+        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
+        uint256 expectedShares = params.bootstrapAmount * 10 ** (VAULT_DECIMALS - baseAssetDecimals);
+
+        asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
+        asset.forceApprove(address(vault), params.bootstrapAmount);
+        vault.unpause();
+        uint256 shares = vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
+
+        // The vault address is CREATE-predictable before deployment, so it can be prefunded.
+        // With live accounting enabled, prefunded balances are included while totalSupply is still
+        // zero, which can dilute the bootstrap deposit down to fewer shares or even zero. The
+        // first mint must therefore match the exact 1:1 normalized amount expected for an empty
+        // vault configured with the factory's fixed par provider.
+        if (shares != expectedShares) revert BootstrapSharesMismatch(shares, expectedShares);
+        asset.forceApprove(address(vault), 0);
+    }
+
+    function _renounceTemporaryRoles(IVault vault) internal {
+        vault.renounceRole(vault.DEFAULT_ADMIN_ROLE(), address(this));
+        vault.renounceRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
+        vault.renounceRole(vault.BUFFER_MANAGER_ROLE(), address(this));
+        vault.renounceRole(vault.ASSET_MANAGER_ROLE(), address(this));
+        vault.renounceRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
+        vault.renounceRole(vault.HOOKS_MANAGER_ROLE(), address(this));
+        vault.renounceRole(vault.UNPAUSER_ROLE(), address(this));
+    }
+
+    /// FLEX STRATEGY ///
+
     function _flexConfig(
         address vault,
         address timelock,
@@ -160,113 +297,7 @@ contract VaultFactory is IVaultFactory {
         IFlexStrategy(strategy).renounceRole(FlexStrategyDeployer.ALLOCATOR_ROLE, address(this));
     }
 
-    /// @notice Advances the factory CREATE nonce without deploying a vault.
-    /// @dev Intended as an operational escape hatch if a future CREATE-derived vault address is
-    /// prefunded before createVault executes.
-    function advanceNonce() external returns (address marker) {
-        marker = address(new NonceMarker());
-        emit NonceAdvanced(msg.sender, marker);
-    }
-
-    function _initializeVault(IVault vault, VaultParams calldata params, Assets memory assets) internal {
-        vault.initialize(
-            address(this),
-            params.tokenName,
-            params.tokenSymbol,
-            VAULT_DECIMALS,
-            BASE_WITHDRAWAL_FEE,
-            params.countNativeAsset,
-            params.alwaysComputeTotalAssets,
-            assets.defaultAssetIndex
-        );
-    }
-
-    function _validateVaultParams(VaultParams calldata params) internal view {
-        if (
-            params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
-                || params.unpauser == address(0) || params.feeManager == address(0) || params.resolver == address(0)
-                || params.baseAsset == address(0) || params.bootstrapReceiver == address(0)
-        ) {
-            revert ZeroAddress();
-        }
-
-        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);
-        uint256 minBootstrapAmount = 10 ** baseAssetDecimals;
-        if (params.bootstrapAmount < minBootstrapAmount) {
-            revert BootstrapAmountTooLow(params.bootstrapAmount, minBootstrapAmount);
-        }
-    }
-
-    function _prepareAssets(VaultParams calldata params, address timelock) internal returns (Assets memory assets) {
-        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        assets.defaultAsset = params.baseAsset;
-
-        if (baseAssetDecimals == VAULT_DECIMALS) {
-            assets.effectiveBaseAsset = params.baseAsset;
-        } else {
-            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, timelock);
-            assets.effectiveBaseAsset = assets.wrappedToken;
-        }
-
-        assets.defaultAssetIndex = assets.effectiveBaseAsset == assets.defaultAsset ? 0 : 1;
-    }
-
-    function _deployWrappedToken(address underlying, uint8 underlyingDecimals, address timelock)
-        internal
-        returns (address wrappedToken)
-    {
-        wrappedToken = address(
-            new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WRAPPED_TOKEN), timelock)
-        );
-        IWrappedToken(wrappedToken)
-            .initialize(
-                IERC20(underlying),
-                _wrappedTokenName(underlying),
-                _wrappedTokenSymbol(underlying),
-                VAULT_DECIMALS,
-                VAULT_DECIMALS - underlyingDecimals
-            );
-    }
-
-    function _configureVault(
-        IVault vault,
-        Assets memory assets,
-        VaultParams calldata params,
-        address provider,
-        address timelock
-    ) internal {
-        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
-
-        // IMPORTANT: the vault's DEFAULT_ADMIN_ROLE must be held by the timelock and nothing
-        // else. It is the role admin for every vault role, so this is what forces critical role
-        // updates (e.g. granting or revoking PROVIDER_MANAGER_ROLE or ASSET_MANAGER_ROLE) through
-        // a scheduled, delayed timelock operation. Granting it to any other account would let
-        // that account rewire vault roles instantly, bypassing the timelock entirely.
-        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), timelock);
-        vault.grantRole(vault.PROCESSOR_ROLE(), params.processor);
-        vault.grantRole(vault.PAUSER_ROLE(), params.pauser);
-        vault.grantRole(vault.UNPAUSER_ROLE(), params.unpauser);
-        vault.grantRole(vault.FEE_MANAGER_ROLE(), params.feeManager);
-
-        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.ASSET_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
-
-        vault.addAsset(assets.effectiveBaseAsset, true);
-        if (assets.defaultAssetIndex == 1) {
-            vault.addAsset(assets.defaultAsset, true);
-        }
-        vault.setProvider(provider);
-        vault.setBuffer(address(0));
-    }
+    /// WITHDRAWAL SYSTEM ///
 
     /// @notice Deploys the async withdrawal system for a vault. Callable standalone for vaults
     /// not created through this factory; the caller is then responsible for granting the returned
@@ -301,34 +332,7 @@ contract VaultFactory is IVaultFactory {
         emit WithdrawalSystemDeployed(vault, timelock, withdrawals);
     }
 
-    function _bootstrap(IVault vault, VaultParams calldata params) internal {
-        IERC20 asset = IERC20(params.baseAsset);
-        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        uint256 expectedShares = params.bootstrapAmount * 10 ** (VAULT_DECIMALS - baseAssetDecimals);
-
-        asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
-        asset.forceApprove(address(vault), params.bootstrapAmount);
-        vault.unpause();
-        uint256 shares = vault.deposit(params.bootstrapAmount, params.bootstrapReceiver);
-
-        // The vault address is CREATE-predictable before deployment, so it can be prefunded.
-        // With live accounting enabled, prefunded balances are included while totalSupply is still
-        // zero, which can dilute the bootstrap deposit down to fewer shares or even zero. The
-        // first mint must therefore match the exact 1:1 normalized amount expected for an empty
-        // vault configured with the factory's fixed par provider.
-        if (shares != expectedShares) revert BootstrapSharesMismatch(shares, expectedShares);
-        asset.forceApprove(address(vault), 0);
-    }
-
-    function _renounceTemporaryRoles(IVault vault) internal {
-        vault.renounceRole(vault.DEFAULT_ADMIN_ROLE(), address(this));
-        vault.renounceRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.BUFFER_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.ASSET_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.HOOKS_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.UNPAUSER_ROLE(), address(this));
-    }
+    /// HELPERS ///
 
     function _registryValue(bytes32 key) internal view returns (address value) {
         value = REGISTRY.valueOf(key);
@@ -341,5 +345,15 @@ contract VaultFactory is IVaultFactory {
 
     function _wrappedTokenSymbol(address underlying) internal view returns (string memory) {
         return string.concat("W", IERC20Metadata(underlying).symbol());
+    }
+
+    /// NONCE ///
+
+    /// @notice Advances the factory CREATE nonce without deploying a vault.
+    /// @dev Intended as an operational escape hatch if a future CREATE-derived vault address is
+    /// prefunded before createVault executes.
+    function advanceNonce() external returns (address marker) {
+        marker = address(new NonceMarker());
+        emit NonceAdvanced(msg.sender, marker);
     }
 }
