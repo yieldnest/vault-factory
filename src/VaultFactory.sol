@@ -81,10 +81,12 @@ contract VaultFactory is IVaultFactory {
         _configureVault(vault, assets, params, created.provider, address(timelock));
 
         if (flexParams.deployStrategy) {
-            // The strategy's shares are a vault asset, priced by the FlexProvider at the
-            // strategy's live redemption rate. The vault's processor operates the strategy
-            // through the preloaded rules only.
-            vault.addAsset(created.flexStrategy, true);
+            // The strategy's shares are an accounting-only vault asset, priced by the
+            // FlexProvider at the strategy's live redemption rate. active MUST be false: it
+            // gates vault-side deposits of the asset, and strategy shares must never be
+            // depositable into the vault. The vault's processor operates the strategy through
+            // the preloaded rules only.
+            vault.addAsset(created.flexStrategy, false);
             FlexStrategyDeployer.configureVaultRules(created.vault, created.flexStrategy, params.baseAsset);
         }
 
@@ -198,7 +200,11 @@ contract VaultFactory is IVaultFactory {
         vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
         vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
 
-        vault.addAsset(assets.effectiveBaseAsset, true);
+        // The effective base asset is active only when it is itself the ERC4626 default asset
+        // (the 18-decimal, no-wrapper case), which must accept deposits. A wrapper is an
+        // accounting-only denominator and MUST NOT be depositable into the vault; only the
+        // default asset takes deposits.
+        vault.addAsset(assets.effectiveBaseAsset, assets.defaultAssetIndex == 0);
         if (assets.defaultAssetIndex == 1) {
             vault.addAsset(assets.defaultAsset, true);
         }

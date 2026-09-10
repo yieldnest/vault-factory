@@ -646,6 +646,11 @@ contract VaultFactoryTest is Test {
         assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
         assertEq(asset.balanceOf(created.vault), 1 ether);
 
+        // With 18 decimals there is no wrapper: the base asset is itself the ERC4626 default
+        // asset and must accept deposits.
+        assertEq(vault.assets(0), address(asset));
+        assertTrue(vault.activeAsset(address(asset)));
+
         assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), created.timelock));
         assertTrue(vault.hasRole(vault.PROCESSOR_ROLE(), processor));
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), pauser));
@@ -730,7 +735,8 @@ contract VaultFactoryTest is Test {
 
         MockVault vault = MockVault(created.vault);
         assertEq(vault.assets(0), created.wrappedToken);
-        assertTrue(vault.activeAsset(created.wrappedToken));
+        // The wrapper is an accounting-only denominator and must not be depositable.
+        assertFalse(vault.activeAsset(created.wrappedToken));
         assertEq(vault.assets(1), address(usdc));
         assertTrue(vault.activeAsset(address(usdc)));
         assertEq(vault.defaultAssetIndex(), 1);
@@ -825,6 +831,11 @@ contract VaultFactoryTest is Test {
         assertEq(vault.assets(0), created.wrappedToken);
         assertEq(vault.assets(1), address(usdc));
         assertEq(vault.assets(2), created.flexStrategy);
+        // Only the ERC4626 default asset accepts deposits; the wrapper and the strategy are
+        // accounting-only and added inactive.
+        assertFalse(vault.activeAsset(created.wrappedToken));
+        assertTrue(vault.activeAsset(address(usdc)));
+        assertFalse(vault.activeAsset(created.flexStrategy));
 
         // Vault rules: approve on the default asset plus deposit/mint/withdraw/redeem on the strategy.
         assertEq(vault.ruleCount(), 5);

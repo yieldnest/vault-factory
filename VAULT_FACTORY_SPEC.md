@@ -62,6 +62,8 @@ Vault creators pass `baseAsset`. The factory derives both the ERC4626 Default As
 
 The Wrapped Token is deployed behind the same OpenZeppelin Transparent Upgradeable Proxy pattern as the Main Vault. Its `ProxyAdmin` is owned by the same deployment timelock used for the Main Vault, so wrapper upgrades follow the same upgradeability rules.
 
+The wrapper is added to the Main Vault as an **inactive** asset: it is an accounting-only denominator and must not be depositable into the vault. Only the ERC4626 Default Asset accepts deposits.
+
 
 
 ### Rate Provider
@@ -219,7 +221,7 @@ The Allocators contains the Main Vault and the factory contract that will make t
 
 Once that boostrap action is done, the role is renounced.
 
-The strategy's shares are added as the Main Vault's third asset and priced by the `FlexProvider`.
+The strategy's shares are added as the Main Vault's third asset and priced by the `FlexProvider`. The asset is added **inactive**: `active` gates vault-side deposits, and strategy shares must never be depositable into the Main Vault — they are an accounting-only asset.
 
 #### Flex strategy deposit rules
 
