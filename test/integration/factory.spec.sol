@@ -279,12 +279,10 @@ contract VaultFactoryIntegrationTest is Test {
         deal(USDC, CREATOR, BOOTSTRAP_AMOUNT);
 
         // This registry populates only the core keys, so the flex path must fail closed on the
-        // first missing flex implementation.
+        // first missing flex dependency.
         vm.startPrank(CREATOR);
         IERC20(USDC).approve(address(factory), BOOTSTRAP_AMOUNT);
-        vm.expectRevert(
-            abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.FLEX_STRATEGY)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.SAFE_GUARD));
         factory.createVault(_vaultParams(), flexParams);
         vm.stopPrank();
     }

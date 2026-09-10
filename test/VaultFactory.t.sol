@@ -10,6 +10,7 @@ import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/M
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {VaultFactory} from "src/VaultFactory.sol";
+import {ISafeGuard} from "src/interfaces/external/ISafeGuard.sol";
 import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 import {FixedRateProvider} from "src/provider/FixedRateProvider.sol";
 import {FlexProvider} from "src/provider/FlexProvider.sol";
@@ -556,6 +557,63 @@ contract MockRewardsSweeper is MockAccessControl {
     }
 }
 
+contract MockSafeGuard {
+    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 public constant PROCESSOR_MANAGER_ROLE = keccak256("PROCESSOR_MANAGER_ROLE");
+    bytes32 public constant GUARD_ADMIN_ROLE = keccak256("GUARD_ADMIN_ROLE");
+
+    string public name;
+    address public admin;
+    bool public initialized;
+    address[] public ruleTargets;
+    bytes4[] public ruleSigs;
+    mapping(bytes32 => mapping(address => bool)) public hasRole;
+    mapping(address => mapping(bytes4 => ISafeGuard.FunctionRule)) private rules;
+
+    function initialize(string calldata name_, address admin_) external {
+        require(!initialized, "initialized");
+        initialized = true;
+        name = name_;
+        admin = admin_;
+        hasRole[DEFAULT_ADMIN_ROLE][admin_] = true;
+        hasRole[PROCESSOR_MANAGER_ROLE][admin_] = true;
+        hasRole[GUARD_ADMIN_ROLE][admin_] = true;
+    }
+
+    function grantRole(bytes32 role, address account) external {
+        require(hasRole[DEFAULT_ADMIN_ROLE][msg.sender], "admin");
+        hasRole[role][account] = true;
+        if (role == DEFAULT_ADMIN_ROLE) admin = account;
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) external {
+        require(msg.sender == callerConfirmation, "confirmation");
+        hasRole[role][callerConfirmation] = false;
+    }
+
+    function setProcessorRules(
+        address[] calldata target,
+        bytes4[] calldata functionSig,
+        ISafeGuard.FunctionRule[] calldata rule
+    ) external {
+        require(hasRole[PROCESSOR_MANAGER_ROLE][msg.sender], "role");
+        require(target.length == functionSig.length && target.length == rule.length, "length");
+        for (uint256 i = 0; i < target.length; ++i) {
+            rules[target[i]][functionSig[i]] = rule[i];
+            ruleTargets.push(target[i]);
+            ruleSigs.push(functionSig[i]);
+        }
+    }
+
+    function getProcessorRule(address contractAddress, bytes4 funcSig)
+        external
+        view
+        returns (ISafeGuard.FunctionRule memory)
+    {
+        return rules[contractAddress][funcSig];
+    }
+}
+
 contract VaultFactoryTest is Test {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
@@ -581,6 +639,7 @@ contract VaultFactoryTest is Test {
     MockAccountingModule private accountingModuleLogic;
     MockAccountingTokenFactory private accountingTokenFactory;
     MockRewardsSweeper private rewardsSweeperLogic;
+    MockSafeGuard private safeGuardLogic;
 
     function setUp() public {
         Registry registryLogic = new Registry();
@@ -614,6 +673,8 @@ contract VaultFactoryTest is Test {
         registry.setValue(RegistryKeys.ACCOUNTING_MODULE, address(accountingModuleLogic));
         registry.setValue(RegistryKeys.ACCOUNTING_TOKEN_FACTORY, address(accountingTokenFactory));
         registry.setValue(RegistryKeys.REWARDS_SWEEPER, address(rewardsSweeperLogic));
+        safeGuardLogic = new MockSafeGuard();
+        registry.setValue(RegistryKeys.SAFE_GUARD, address(safeGuardLogic));
 
         asset.mint(creator, 1 ether);
     }
@@ -626,6 +687,7 @@ contract VaultFactoryTest is Test {
         IVaultFactory.CreatedVault memory created = factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
         vm.stopPrank();
 
+        assertEq(created.safeGuard, address(0));
         assertEq(created.wrappedToken, address(0));
         MockVault vault = MockVault(created.vault);
 
@@ -800,6 +862,8 @@ contract VaultFactoryTest is Test {
         MockAccountingModule accountingModule = MockAccountingModule(created.accountingModule);
         MockRewardsSweeper rewardsSweeper = MockRewardsSweeper(created.rewardsSweeper);
 
+        _assertSafeGuard(created, address(usdc), address(0x0FF));
+
         // Strategy initialization and wiring.
         assertTrue(strategy.initialized());
         assertEq(strategy.name(), "Flex Strategy");
@@ -924,6 +988,39 @@ contract VaultFactoryTest is Test {
         assertEq(IProxyAdminOwner(sweeperProxyAdmin).owner(), created.timelock);
     }
 
+    function _assertSafeGuard(IVaultFactory.CreatedVault memory created, address baseAsset, address offRampAddress)
+        internal
+        view
+    {
+        MockSafeGuard safeGuard = MockSafeGuard(created.safeGuard);
+
+        assertTrue(safeGuard.initialized());
+        assertEq(safeGuard.name(), "Flex Strategy Safeguard");
+        assertEq(safeGuard.admin(), created.timelock);
+        assertTrue(safeGuard.hasRole(safeGuard.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(safeGuard.hasRole(safeGuard.PROCESSOR_MANAGER_ROLE(), created.timelock));
+        assertTrue(safeGuard.hasRole(safeGuard.GUARD_ADMIN_ROLE(), created.timelock));
+        assertFalse(safeGuard.hasRole(safeGuard.DEFAULT_ADMIN_ROLE(), address(factory)));
+        assertFalse(safeGuard.hasRole(safeGuard.PROCESSOR_MANAGER_ROLE(), address(factory)));
+        assertFalse(safeGuard.hasRole(safeGuard.GUARD_ADMIN_ROLE(), address(factory)));
+        assertEq(safeGuard.ruleTargets(0), baseAsset);
+        assertEq(safeGuard.ruleSigs(0), IERC20.transfer.selector);
+
+        ISafeGuard.FunctionRule memory transferRule =
+            ISafeGuard(created.safeGuard).getProcessorRule(baseAsset, IERC20.transfer.selector);
+        assertTrue(transferRule.isActive);
+        assertEq(transferRule.paramRules.length, 2);
+        assertEq(uint8(transferRule.paramRules[0].paramType), uint8(ISafeGuard.ParamType.ADDRESS));
+        assertEq(transferRule.paramRules[0].allowList.length, 1);
+        assertEq(transferRule.paramRules[0].allowList[0], offRampAddress);
+        assertEq(uint8(transferRule.paramRules[1].paramType), uint8(ISafeGuard.ParamType.UINT256));
+        assertEq(transferRule.paramRules[1].allowList.length, 0);
+        assertEq(transferRule.validator, address(0));
+
+        address safeGuardProxyAdmin = address(uint160(uint256(vm.load(created.safeGuard, ERC1967_ADMIN_SLOT))));
+        assertEq(IProxyAdminOwner(safeGuardProxyAdmin).owner(), created.timelock);
+    }
+
     function testCreateVaultDeploysFlexStrategyWithoutRewardsSweeper() public {
         MockToken usdc = new MockToken(6);
         usdc.mint(creator, 2e6);
@@ -953,6 +1050,17 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
+        vm.expectRevert(IVaultFactory.ZeroAddress.selector);
+        factory.createVault(_vaultParams(1 ether), flexParams);
+        vm.stopPrank();
+    }
+
+    function testCreateVaultFlexStrategyRequiresOffRampAddress() public {
+        IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
+        flexParams.offRampAddress = address(0);
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 2 ether);
         vm.expectRevert(IVaultFactory.ZeroAddress.selector);
         factory.createVault(_vaultParams(1 ether), flexParams);
         vm.stopPrank();

@@ -120,8 +120,7 @@ library FlexStrategyDeployer {
         // Per-asset accounting token implementation, then the proxy the system actually uses.
         address accountingTokenLogic =
             IAccountingTokenFactory(cfg.accountingTokenFactory).deployAccountingTokenImplementation(cfg.baseAsset);
-        sys.accountingToken =
-            address(new UninitializedTransparentUpgradeableProxy(accountingTokenLogic, cfg.timelock));
+        sys.accountingToken = address(new UninitializedTransparentUpgradeableProxy(accountingTokenLogic, cfg.timelock));
         IAccountingToken(sys.accountingToken)
             .initialize(address(this), address(this), cfg.accountingTokenName, cfg.accountingTokenSymbol);
 

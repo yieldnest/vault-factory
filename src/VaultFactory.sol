@@ -12,6 +12,7 @@ import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {FlexStrategyDeployer} from "src/lib/FlexStrategyDeployer.sol";
 import {IFlexStrategy} from "src/interfaces/external/IFlexStrategy.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
+import {SafeGuardDeployer} from "src/lib/SafeGuardDeployer.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
 import {WithdrawalSystemDeployer} from "src/lib/WithdrawalSystemDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
@@ -53,6 +54,9 @@ contract VaultFactory is IVaultFactory {
         returns (CreatedVault memory created)
     {
         _validateVaultParams(params);
+        if (flexParams.deployStrategy) {
+            _validateFlexParams(flexParams);
+        }
 
         TimelockController timelock = TimelockDeployer.deploy(params.admin, params.timelockDuration);
         address vaultLogic = _registryValue(RegistryKeys.VAULT);
@@ -63,7 +67,15 @@ contract VaultFactory is IVaultFactory {
         created.vault = address(new UninitializedTransparentUpgradeableProxy(vaultLogic, address(timelock)));
 
         if (flexParams.deployStrategy) {
-            // TODO: Deploy and configure the flex strategy SafeGuard once its deployment API is finalized.
+            created.safeGuard = SafeGuardDeployer.deploy(
+                SafeGuardDeployer.Config({
+                    safeGuardLogic: _registryValue(RegistryKeys.SAFE_GUARD),
+                    timelock: address(timelock),
+                    baseAsset: params.baseAsset,
+                    offRampAddress: flexParams.offRampAddress,
+                    strategyName: flexParams.strategyName
+                })
+            );
             FlexStrategyDeployer.FlexSystem memory flex =
                 FlexStrategyDeployer.deploy(_flexConfig(created.vault, address(timelock), params, flexParams, assets));
             created.flexStrategy = flex.strategy;
@@ -127,6 +139,15 @@ contract VaultFactory is IVaultFactory {
         uint256 minBootstrapAmount = 10 ** baseAssetDecimals;
         if (params.bootstrapAmount < minBootstrapAmount) {
             revert BootstrapAmountTooLow(params.bootstrapAmount, minBootstrapAmount);
+        }
+    }
+
+    function _validateFlexParams(FlexStrategyParams calldata flexParams) internal pure {
+        if (
+            flexParams.multisig == address(0) || flexParams.accountingProcessor == address(0)
+                || flexParams.offRampAddress == address(0)
+        ) {
+            revert ZeroAddress();
         }
     }
 
@@ -262,8 +283,6 @@ contract VaultFactory is IVaultFactory {
         FlexStrategyParams calldata flexParams,
         Assets memory assets
     ) internal view returns (FlexStrategyDeployer.Config memory cfg) {
-        if (flexParams.multisig == address(0) || flexParams.accountingProcessor == address(0)) revert ZeroAddress();
-
         cfg.vault = vault;
         cfg.effectiveBaseAsset = assets.effectiveBaseAsset;
         cfg.timelock = timelock;
