@@ -122,7 +122,11 @@ contract VaultFactory is IVaultFactory {
             _bootstrapStrategy(created.flexStrategy, created.vault, params);
         }
 
-        // Refresh cached accounting to include strategy shares minted directly to the vault.
+        // Refresh cached accounting after direct bootstrap mints. The main vault prices strategy
+        // shares through the strategy, so refresh the strategy first when it uses cached totals.
+        if (flexParams.deployStrategy && !flexParams.alwaysComputeTotalAssets) {
+            IFlexStrategy(created.flexStrategy).processAccounting();
+        }
         if (!params.alwaysComputeTotalAssets) {
             vault.processAccounting();
         }
@@ -295,7 +299,7 @@ contract VaultFactory is IVaultFactory {
         cfg.timelock = timelock;
         cfg.baseAsset = params.baseAsset;
         cfg.baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        cfg.alwaysComputeTotalAssets = params.alwaysComputeTotalAssets;
+        cfg.alwaysComputeTotalAssets = flexParams.alwaysComputeTotalAssets;
         cfg.deployRewardsSweeper = flexParams.deployRewardsSweeper;
         cfg.processor = params.processor;
         cfg.pauser = params.pauser;

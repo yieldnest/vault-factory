@@ -395,6 +395,7 @@ contract MockFlexStrategy is MockAccessControl {
     bool public hasAllocator;
     address public accountingModule;
     bool public initialized;
+    uint256 public processAccountingCalls;
     mapping(address => uint256) public shareBalance;
     address[] public ruleTargets;
     bytes4[] public ruleSigs;
@@ -448,6 +449,10 @@ contract MockFlexStrategy is MockAccessControl {
 
     function ruleCount() external view returns (uint256) {
         return ruleTargets.length;
+    }
+
+    function processAccounting() external {
+        processAccountingCalls++;
     }
 
     function unpause() external onlyRole(UNPAUSER_ROLE) {
@@ -870,14 +875,38 @@ contract VaultFactoryTest is Test {
         IVaultFactory.VaultParams memory params = _vaultParams(1e6);
         params.baseAsset = address(usdc);
         params.alwaysComputeTotalAssets = false;
+        IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 2e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _flexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
         vm.stopPrank();
 
         assertEq(MockVault(created.vault).processAccountingCalls(), 1);
-        assertEq(MockFlexStrategy(created.flexStrategy).shareBalance(created.vault), 1e6);
+        MockFlexStrategy strategy = MockFlexStrategy(created.flexStrategy);
+        assertEq(strategy.processAccountingCalls(), 0);
+        assertEq(strategy.shareBalance(created.vault), 1e6);
+    }
+
+    function testCreateVaultProcessesStrategyAccountingWhenFlexCachedAccountingEnabled() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 2e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdc);
+        params.alwaysComputeTotalAssets = true;
+        IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
+        flexParams.alwaysComputeTotalAssets = false;
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 2e6);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
+        vm.stopPrank();
+
+        assertEq(MockVault(created.vault).processAccountingCalls(), 0);
+        MockFlexStrategy strategy = MockFlexStrategy(created.flexStrategy);
+        assertEq(strategy.processAccountingCalls(), 1);
+        assertEq(strategy.shareBalance(created.vault), 1e6);
     }
 
     function testCreateVaultBootstrapsWithNoReturnDataToken() public {
@@ -940,6 +969,7 @@ contract VaultFactoryTest is Test {
         assertEq(strategy.accountingModule(), created.accountingModule);
         assertFalse(strategy.paused());
         assertTrue(strategy.hasAllocator());
+        assertEq(strategy.processAccountingCalls(), 0);
         assertEq(strategy.hooks(), created.accountingModuleHook);
         assertEq(vault.processAccountingCalls(), 0);
         assertEq(hooksDeployer.lastVault(), created.flexStrategy);
@@ -1247,6 +1277,7 @@ contract VaultFactoryTest is Test {
         return IVaultFactory.FlexStrategyParams({
             deployStrategy: true,
             deployRewardsSweeper: true,
+            alwaysComputeTotalAssets: true,
             multisig: address(0x5AFE),
             offRampAddress: address(0x0FF),
             accountingProcessor: address(0xACC0),

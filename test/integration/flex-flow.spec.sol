@@ -203,6 +203,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         return IVaultFactory.FlexStrategyParams({
             deployStrategy: true,
             deployRewardsSweeper: true,
+            alwaysComputeTotalAssets: true,
             multisig: multisig,
             offRampAddress: TestConstants.OFF_RAMP,
             accountingProcessor: TestConstants.PROCESSOR,
