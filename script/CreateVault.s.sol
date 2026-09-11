@@ -64,10 +64,14 @@ contract CreateVault is Script {
         });
 
         vm.startBroadcast();
+        (bytes32 deploymentId, IVaultFactory.CreatedVault memory started) =
+            IVaultFactory(factory).startCreateVault(params, flexParams);
         IERC20(USDC).approve(factory, BOOTSTRAP_AMOUNT * 2);
-        created = IVaultFactory(factory).createVault(params, flexParams);
+        created = IVaultFactory(factory).resumeCreateVault(deploymentId);
         vm.stopBroadcast();
 
+        console2.logBytes32(deploymentId);
+        console2.log("Started vault:", started.vault);
         console2.log("Vault:", created.vault);
         console2.log("Timelock:", created.timelock);
         console2.log("Wrapped token:", created.wrappedToken);
@@ -84,6 +88,7 @@ contract CreateVault is Script {
         console2.log("Rewards sweeper:", created.rewardsSweeper);
 
         string memory obj = "deployment";
+        vm.serializeBytes32(obj, "deploymentId", deploymentId);
         vm.serializeAddress(obj, "vault", created.vault);
         vm.serializeAddress(obj, "vaultProxyAdmin", _proxyAdmin(created.vault));
         vm.serializeAddress(obj, "timelock", created.timelock);

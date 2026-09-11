@@ -1126,6 +1126,53 @@ contract VaultFactoryTest is Test {
         assertEq(IProxyAdminOwner(safeGuardProxyAdmin).owner(), created.timelock);
     }
 
+    function testStartAndResumeCreateVaultDeploysFlexStrategy() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 2e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdc);
+
+        vm.startPrank(creator);
+        (bytes32 deploymentId, IVaultFactory.CreatedVault memory started) =
+            factory.startCreateVault(params, _flexParams());
+
+        MockVault startedVault = MockVault(started.vault);
+        assertTrue(startedVault.paused());
+        assertEq(started.flexStrategy, address(0));
+        assertTrue(startedVault.hasRole(startedVault.DEFAULT_ADMIN_ROLE(), address(factory)));
+        assertTrue(startedVault.hasRole(startedVault.ASSET_MANAGER_ROLE(), address(factory)));
+
+        usdc.approve(address(factory), 2e6);
+        IVaultFactory.CreatedVault memory created = factory.resumeCreateVault(deploymentId);
+        vm.stopPrank();
+
+        MockVault vault = MockVault(created.vault);
+        MockFlexStrategy strategy = MockFlexStrategy(created.flexStrategy);
+        assertEq(created.vault, started.vault);
+        assertFalse(vault.paused());
+        assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
+        assertEq(strategy.shareBalance(created.vault), 1e6);
+        assertFalse(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), address(factory)));
+        assertFalse(vault.hasRole(vault.ASSET_MANAGER_ROLE(), address(factory)));
+        assertFalse(strategy.hasRole(strategy.ALLOCATOR_ROLE(), address(factory)));
+
+        vm.prank(creator);
+        vm.expectRevert(abi.encodeWithSelector(IVaultFactory.UnknownDeployment.selector, deploymentId));
+        factory.resumeCreateVault(deploymentId);
+    }
+
+    function testResumeCreateVaultRejectsNonCreator() public {
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+
+        vm.prank(creator);
+        (bytes32 deploymentId,) = factory.startCreateVault(params, _emptyFlexParams());
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(IVaultFactory.Unauthorized.selector);
+        factory.resumeCreateVault(deploymentId);
+    }
+
     function testCreateVaultDeploysFlexStrategyWithoutRewardsSweeper() public {
         MockToken usdc = new MockToken(6);
         usdc.mint(creator, 2e6);
