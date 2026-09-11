@@ -151,6 +151,7 @@ contract MockVault {
     bool public alwaysComputeTotalAssets;
     uint256 public defaultAssetIndex;
     uint256 public totalSupply;
+    uint256 public processAccountingCalls;
 
     modifier onlyRole(bytes32 role) {
         require(hasRole[role][msg.sender], "role");
@@ -233,6 +234,10 @@ contract MockVault {
         require(success && (data.length == 0 || abi.decode(data, (bool))), "transfer");
         shareBalance[receiver] += shares;
         totalSupply += shares;
+    }
+
+    function processAccounting() external {
+        processAccountingCalls++;
     }
 }
 
@@ -727,6 +732,7 @@ contract VaultFactoryTest is Test {
         assertEq(vault.tokenDecimals(), 18);
         assertFalse(vault.countNativeAsset());
         assertTrue(vault.alwaysComputeTotalAssets());
+        assertEq(vault.processAccountingCalls(), 0);
         assertFalse(vault.paused());
         assertEq(vault.provider(), created.provider);
         assertEq(vault.buffer(), address(0));
@@ -845,6 +851,35 @@ contract VaultFactoryTest is Test {
         assertEq(IProxyAdminOwner(wrapperProxyAdmin).owner(), created.timelock);
     }
 
+    function testCreateVaultProcessesAccountingWhenCachedAccountingEnabled() public {
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        params.alwaysComputeTotalAssets = false;
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        vm.stopPrank();
+
+        assertEq(MockVault(created.vault).processAccountingCalls(), 1);
+    }
+
+    function testCreateVaultProcessesAccountingAfterFlexBootstrapWhenCachedAccountingEnabled() public {
+        MockToken usdc = new MockToken(6);
+        usdc.mint(creator, 2e6);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1e6);
+        params.baseAsset = address(usdc);
+        params.alwaysComputeTotalAssets = false;
+
+        vm.startPrank(creator);
+        usdc.approve(address(factory), 2e6);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _flexParams());
+        vm.stopPrank();
+
+        assertEq(MockVault(created.vault).processAccountingCalls(), 1);
+        assertEq(MockFlexStrategy(created.flexStrategy).shareBalance(created.vault), 1e6);
+    }
+
     function testCreateVaultBootstrapsWithNoReturnDataToken() public {
         MockUSDTToken usdt = new MockUSDTToken(6);
         usdt.mint(creator, 1e6);
@@ -906,6 +941,7 @@ contract VaultFactoryTest is Test {
         assertFalse(strategy.paused());
         assertTrue(strategy.hasAllocator());
         assertEq(strategy.hooks(), created.accountingModuleHook);
+        assertEq(vault.processAccountingCalls(), 0);
         assertEq(hooksDeployer.lastVault(), created.flexStrategy);
         assertEq(hooksDeployer.lastFlexStrategy(), created.flexStrategy);
         assertEq(hooksDeployer.lastHook(), created.accountingModuleHook);

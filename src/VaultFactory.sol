@@ -121,6 +121,12 @@ contract VaultFactory is IVaultFactory {
         if (flexParams.deployStrategy) {
             _bootstrapStrategy(created.flexStrategy, created.vault, params);
         }
+
+        // Refresh cached accounting to include strategy shares minted directly to the vault.
+        if (!params.alwaysComputeTotalAssets) {
+            vault.processAccounting();
+        }
+
         _renounceTemporaryRoles(vault);
 
         emit VaultCreated(msg.sender, created.vault, created.timelock, created);
