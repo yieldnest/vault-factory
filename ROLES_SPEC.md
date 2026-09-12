@@ -7,6 +7,7 @@ This document defines the role actors and final role ownership for a vault facto
 Each vault deployment has these role actors:
 
 - **ADMIN:** governance address for the deployment.
+- **PROPOSER:** governance operations multisig for proposing and executing timelocked operations.
 - **Timelock:** the per-vault OpenZeppelin `TimelockController` deployed by the factory.
 - **OPS multisig:** operational multisig for day-to-day processor and pause operations.
 - **RESOLVER multisig:** withdrawal operations multisig for resolving async withdrawal requests.
@@ -19,14 +20,58 @@ The ADMIN is configured on the deployment timelock.
 The ADMIN holds these roles on the `TimelockController`:
 
 - `DEFAULT_ADMIN_ROLE`
+- `CANCELLER_ROLE`
+
+The ADMIN is not the normal proposer or executor. It is the supervisory multisig that can intervene if the proposal flow needs to be stopped or reconfigured.
+
+The ADMIN can cancel a pending proposal through `CANCELLER_ROLE`.
+
+The ADMIN can also revoke the PROPOSER multisig's `PROPOSER_ROLE` or `EXECUTOR_ROLE` through `DEFAULT_ADMIN_ROLE`.
+
+## PROPOSER
+
+The PROPOSER multisig holds these roles on the `TimelockController`:
+
 - `PROPOSER_ROLE`
 - `EXECUTOR_ROLE`
 
-The ADMIN also receives `CANCELLER_ROLE` through the OpenZeppelin `TimelockController` proposer setup.
+The PROPOSER multisig does not hold `DEFAULT_ADMIN_ROLE`.
 
 ## Timelock
 
 The timelock holds delayed control for critical protocol operations across the deployment.
+
+The intended workflow is:
+
+1. The PROPOSER multisig schedules critical operations on the timelock.
+2. The configured timelock delay elapses.
+3. The PROPOSER multisig executes the operation through the timelock.
+
+```text
+                schedule()                  execute()
++----------+  ------------>  +----------+  ----------->  +-------------------+
+| PROPOSER |                 | Timelock |                | Controlled system |
++----------+  <------------  +----------+                +-------------------+
+                delay elapses                    upgrades / config changes
+
++-------+  cancel() / revoke PROPOSER_ROLE or EXECUTOR_ROLE
+| ADMIN |  ------------------------------------------------>
++-------+                    +----------+
+                             | Timelock |
+                             +----------+
+```
+
+Critical operations include, but are not limited to:
+
+- proxy upgrades
+- provider changes
+- asset additions, removals, or status changes
+- buffer changes
+- processor rule changes
+- hook changes
+- manager role changes on controlled contracts
+
+The ADMIN multisig can intervene before execution by cancelling the proposal. If the PROPOSER multisig should no longer control the normal governance flow, the ADMIN multisig can revoke its `PROPOSER_ROLE` and/or `EXECUTOR_ROLE`.
 
 ### Main Vault
 
@@ -160,18 +205,3 @@ When a FlexStrategy is deployed, the accounting processor holds:
 - `REWARDS_PROCESSOR_ROLE` on the AccountingModule
 
 When a RewardsSweeper is deployed, the RewardsSweeper also holds `REWARDS_PROCESSOR_ROLE` on the AccountingModule.
-
-## Factory cleanup
-
-The factory may temporarily hold roles required for construction and bootstrapping.
-
-The completed deployment must not leave dangling factory privileges. In particular, the factory must not retain any:
-
-- `DEFAULT_ADMIN_ROLE`
-- manager role
-- processor role
-- allocator role
-- pauser role
-- unpauser role
-- resolver role
-
