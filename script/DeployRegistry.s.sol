@@ -14,16 +14,19 @@ contract DeployRegistry is Script {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
     function run() external returns (Registry implementation, TimelockController timelock, IRegistry registry) {
-        address admin = vm.promptAddress("Registry admin (timelock proposer/executor)");
+        address admin = vm.promptAddress("Registry admin");
+        address proposer = vm.promptAddress("Registry timelock proposer");
         uint256 minDelay = vm.promptUint("Timelock min delay in seconds");
 
         require(admin != address(0), "admin");
+        require(proposer != address(0), "proposer");
+        require(admin != proposer, "admin proposer");
 
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
 
         implementation = new Registry();
-        timelock = TimelockDeployer.deployInline(admin, minDelay);
+        timelock = TimelockDeployer.deployInline(admin, proposer, minDelay);
 
         // The deployer owns the registry just long enough to register the implementation
         // addresses; ownership moves to the timelock before the broadcast ends.

@@ -196,6 +196,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
     function _vaultParams() internal pure returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: TestConstants.ADMIN,
+            proposer: TestConstants.PROPOSER,
             processor: TestConstants.PROCESSOR,
             pauser: TestConstants.PAUSER,
             unpauser: TestConstants.UNPAUSER,

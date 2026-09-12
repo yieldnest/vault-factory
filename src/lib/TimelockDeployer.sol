@@ -10,26 +10,48 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 /// delegatecall runs CREATE in the factory's context, so the timelock's deployer is still the
 /// factory.
 library TimelockDeployer {
-    function deploy(address admin, uint256 timelockDuration) external returns (TimelockController) {
-        return deployInline(admin, timelockDuration);
+    bytes32 internal constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 internal constant CANCELLER_ROLE = keccak256("CANCELLER_ROLE");
+
+    function deploy(address admin, address proposer, uint256 timelockDuration) external returns (TimelockController) {
+        return deployWithTemporaryAdmin(admin, proposer, timelockDuration, address(this));
     }
 
-    /// @dev For forge scripts, which must use this internal (inlined) variant: a CREATE inside a
-    /// delegatecalled library is silently dropped from the broadcast, so the external `deploy`
-    /// would report success without ever deploying the timelock on-chain.
-    function deployInline(address admin, uint256 timelockDuration) internal returns (TimelockController) {
+    /// @dev Script-friendly variant. It uses `admin` as the constructor admin directly because
+    /// forge scripts do not execute follow-up role wiring from `address(this)` the same way the
+    /// factory does through the external library delegatecall.
+    function deployInline(address admin, address proposer, uint256 timelockDuration)
+        internal
+        returns (TimelockController)
+    {
         address[] memory proposers = new address[](1);
-        proposers[0] = admin;
+        proposers[0] = proposer;
 
         address[] memory executors = new address[](1);
-        executors[0] = admin;
+        executors[0] = proposer;
 
-        // The admin also receives the timelock's DEFAULT_ADMIN_ROLE. Role grants and revokes are
-        // immediate calls, not timelocked operations, so the admin can rewire the proposer,
-        // executor, and canceller sets (or hand off / renounce timelock control) without waiting
-        // out the delay. The delay only protects scheduled operations - upgrades, provider and
-        // asset changes - not the timelock's own membership. This trades the self-administered
-        // hardening OZ recommends for direct recoverability by the vault admin.
+        // The proposer receives PROPOSER_ROLE and EXECUTOR_ROLE. OpenZeppelin TimelockController
+        // also auto-grants CANCELLER_ROLE to every proposer. The admin receives only
+        // DEFAULT_ADMIN_ROLE in this script-friendly path.
         return new TimelockController(timelockDuration, proposers, executors, admin);
+    }
+
+    function deployWithTemporaryAdmin(address admin, address proposer, uint256 timelockDuration, address temporaryAdmin)
+        internal
+        returns (TimelockController timelock)
+    {
+        address[] memory proposers = new address[](1);
+        proposers[0] = proposer;
+
+        address[] memory executors = new address[](1);
+        executors[0] = proposer;
+
+        // The proposer receives PROPOSER_ROLE, EXECUTOR_ROLE, and CANCELLER_ROLE through the
+        // TimelockController constructor, but never DEFAULT_ADMIN_ROLE. The temporary admin is
+        // removed after granting the supervisory admin DEFAULT_ADMIN_ROLE and CANCELLER_ROLE.
+        timelock = new TimelockController(timelockDuration, proposers, executors, temporaryAdmin);
+        timelock.grantRole(DEFAULT_ADMIN_ROLE, admin);
+        timelock.grantRole(CANCELLER_ROLE, admin);
+        timelock.renounceRole(DEFAULT_ADMIN_ROLE, temporaryAdmin);
     }
 }

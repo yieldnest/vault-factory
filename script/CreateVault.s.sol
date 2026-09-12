@@ -9,7 +9,7 @@ import {RegistryImplementations} from "script/RegistryImplementations.sol";
 contract CreateVault is Script {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
-    /// @notice Receives every vault role, the timelock proposer/executor seat, and the bootstrap shares.
+    /// @notice Supervisory admin, operational actor, and bootstrap share receiver for this sample deployment.
     address internal constant CONTROLLER = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
 
     /// @notice Ethereum mainnet USDC, used as both base and default asset.
@@ -27,9 +27,15 @@ contract CreateVault is Script {
 
     function run() external returns (IVaultFactory.CreatedVault memory created) {
         address factory = vm.promptAddress("VaultFactory address");
+        address proposer = vm.envOr("TIMELOCK_PROPOSER", address(0));
+        if (proposer == address(0)) {
+            proposer = vm.promptAddress("Timelock proposer");
+        }
+        require(proposer != CONTROLLER, "admin proposer");
 
         IVaultFactory.VaultParams memory params = IVaultFactory.VaultParams({
             admin: CONTROLLER,
+            proposer: proposer,
             processor: CONTROLLER,
             pauser: CONTROLLER,
             unpauser: CONTROLLER,

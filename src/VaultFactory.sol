@@ -86,7 +86,7 @@ contract VaultFactory is IVaultFactory {
             _validateFlexParams(flexParams);
         }
 
-        TimelockController timelock = TimelockDeployer.deploy(params.admin, params.timelockDuration);
+        TimelockController timelock = TimelockDeployer.deploy(params.admin, params.proposer, params.timelockDuration);
         address vaultLogic = _registryValue(RegistryKeys.VAULT);
         Assets memory assets = _prepareAssets(params, address(timelock));
 
@@ -190,12 +190,15 @@ contract VaultFactory is IVaultFactory {
 
     function _validateVaultParams(VaultParams calldata params) internal view {
         if (
-            params.admin == address(0) || params.processor == address(0) || params.pauser == address(0)
-                || params.unpauser == address(0) || params.feeManager == address(0) || params.resolver == address(0)
-                || params.baseAsset == address(0) || params.bootstrapReceiver == address(0)
+            params.admin == address(0) || params.proposer == address(0) || params.processor == address(0)
+                || params.pauser == address(0) || params.unpauser == address(0) || params.feeManager == address(0)
+                || params.resolver == address(0) || params.baseAsset == address(0)
+                || params.bootstrapReceiver == address(0)
         ) {
             revert ZeroAddress();
         }
+
+        if (params.admin == params.proposer) revert InvalidTimelockRoles();
 
         uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);

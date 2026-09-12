@@ -8,6 +8,7 @@ library TestConstants {
 
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant ADMIN = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
+    address internal constant PROPOSER = 0x1000000000000000000000000000000000000011;
     address internal constant PROCESSOR = 0x1000000000000000000000000000000000000001;
     address internal constant PAUSER = 0x1000000000000000000000000000000000000002;
     address internal constant UNPAUSER = 0x1000000000000000000000000000000000000003;

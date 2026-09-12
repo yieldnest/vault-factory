@@ -123,6 +123,7 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
     function _vaultParams() internal pure returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: TestConstants.ADMIN,
+            proposer: TestConstants.PROPOSER,
             processor: TestConstants.PROCESSOR,
             pauser: TestConstants.PAUSER,
             unpauser: TestConstants.UNPAUSER,
@@ -187,12 +188,12 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
         TimelockController timelock = TimelockController(payable(created.timelock));
         uint256 delay = timelock.getMinDelay();
 
-        vm.prank(TestConstants.ADMIN);
+        vm.prank(TestConstants.PROPOSER);
         timelock.schedule(target, 0, data, bytes32(0), salt, delay);
 
         vm.warp(block.timestamp + delay);
 
-        vm.prank(TestConstants.ADMIN);
+        vm.prank(TestConstants.PROPOSER);
         timelock.execute(target, 0, data, bytes32(0), salt);
     }
 

@@ -6,7 +6,7 @@ import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {VaultVerifier} from "src/VaultVerifier.sol";
 
 contract VerifyVault is Script {
-    /// @notice Receives every vault role, the timelock proposer/executor seat, and the bootstrap shares.
+    /// @notice Supervisory admin, operational actor, and bootstrap share receiver for this sample deployment.
     address internal constant CONTROLLER = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
 
     /// @notice Ethereum mainnet USDC, used as both base and default asset.
@@ -32,11 +32,14 @@ contract VerifyVault is Script {
         }
 
         IVaultFactory.CreatedVault memory created = _createdVault(json);
+        address proposer = vm.envOr("TIMELOCK_PROPOSER", address(0));
+        if (proposer == address(0)) {
+            proposer = vm.promptAddress("Timelock proposer");
+        }
+        require(proposer != CONTROLLER, "admin proposer");
+
         VaultVerifier.Verification memory verification = VaultVerifier.Verification({
-            factory: factory,
-            created: created,
-            vaultParams: _vaultParams(),
-            flexParams: _flexParams()
+            factory: factory, created: created, vaultParams: _vaultParams(proposer), flexParams: _flexParams()
         });
 
         VaultVerifier verifier = new VaultVerifier();
@@ -67,9 +70,10 @@ contract VerifyVault is Script {
         });
     }
 
-    function _vaultParams() internal pure returns (IVaultFactory.VaultParams memory) {
+    function _vaultParams(address proposer) internal pure returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: CONTROLLER,
+            proposer: proposer,
             processor: CONTROLLER,
             pauser: CONTROLLER,
             unpauser: CONTROLLER,

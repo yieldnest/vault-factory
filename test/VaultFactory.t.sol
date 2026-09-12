@@ -6,6 +6,7 @@ import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {MinAmountRequestPolicy} from "yieldnest-vault-withdrawals/src/policies/MinAmountRequestPolicy.sol";
 import {Registry} from "src/Registry.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
@@ -656,6 +657,7 @@ contract VaultFactoryTest is Test {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
 
     address private admin = address(0xA11CE);
+    address private proposer = address(0xA110);
     address private processor = address(0xBEEF);
     address private pauser = address(0xCAFE);
     address private unpauser = address(0xD00D);
@@ -773,6 +775,20 @@ contract VaultFactoryTest is Test {
         assertFalse(vault.hasRole(vault.PROCESSOR_MANAGER_ROLE(), address(factory)));
         assertFalse(vault.hasRole(vault.HOOKS_MANAGER_ROLE(), address(factory)));
         assertFalse(vault.hasRole(vault.UNPAUSER_ROLE(), address(factory)));
+
+        TimelockController timelock = TimelockController(payable(created.timelock));
+        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), admin));
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), admin));
+        assertFalse(timelock.hasRole(timelock.PROPOSER_ROLE(), admin));
+        assertFalse(timelock.hasRole(timelock.EXECUTOR_ROLE(), admin));
+        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), proposer));
+        assertTrue(timelock.hasRole(timelock.EXECUTOR_ROLE(), proposer));
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), proposer));
+        assertFalse(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), proposer));
+        assertFalse(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), address(factory)));
+        assertFalse(timelock.hasRole(timelock.PROPOSER_ROLE(), address(factory)));
+        assertFalse(timelock.hasRole(timelock.EXECUTOR_ROLE(), address(factory)));
+        assertFalse(timelock.hasRole(timelock.CANCELLER_ROLE(), address(factory)));
 
         address proxyAdmin = address(uint160(uint256(vm.load(created.vault, ERC1967_ADMIN_SLOT))));
         assertEq(IProxyAdminOwner(proxyAdmin).owner(), created.timelock);
@@ -925,6 +941,14 @@ contract VaultFactoryTest is Test {
         assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
         assertEq(usdt.balanceOf(created.vault), 1e6);
         assertEq(usdt.allowance(address(factory), created.vault), 0);
+    }
+
+    function testCreateVaultRevertsWhenAdminIsProposer() public {
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        params.proposer = params.admin;
+
+        vm.expectRevert(IVaultFactory.InvalidTimelockRoles.selector);
+        factory.createVault(params, _emptyFlexParams());
     }
 
     function testCreateVaultRevertsWhenBootstrapSharesMismatch() public {
@@ -1298,6 +1322,7 @@ contract VaultFactoryTest is Test {
     function _vaultParams(uint256 bootstrapAmount) internal view returns (IVaultFactory.VaultParams memory) {
         return IVaultFactory.VaultParams({
             admin: admin,
+            proposer: proposer,
             processor: processor,
             pauser: pauser,
             unpauser: unpauser,
