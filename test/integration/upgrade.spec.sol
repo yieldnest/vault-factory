@@ -30,9 +30,7 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
     IVaultFactory.CreatedVault internal created;
 
     function setUp() public virtual {
-        string memory rpcUrl = vm.envOr("MAINNET_RPC_URL", string(""));
-        vm.skip(bytes(rpcUrl).length == 0, "MAINNET_RPC_URL not set");
-        vm.createSelectFork(rpcUrl);
+        vm.createSelectFork(vm.rpcUrl("eth_mainnet"));
 
         registry = _deployRegistry();
         _populateRegistry();
