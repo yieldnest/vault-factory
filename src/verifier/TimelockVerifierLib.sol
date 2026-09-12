@@ -13,17 +13,18 @@ library TimelockVerifierLib {
         IAccessControlView access = IAccessControlView(timelock);
 
         _verify(timelock != address(0) && timelock.code.length != 0, "tl0");
-        _verify(admin != proposer, "tl1");
-
         _verifyRole(access, DEFAULT_ADMIN_ROLE, admin, true, "tl2");
         _verifyRole(access, CANCELLER_ROLE, admin, true, "tl3");
-        _verifyRole(access, PROPOSER_ROLE, admin, false, "tl4");
-        _verifyRole(access, EXECUTOR_ROLE, admin, false, "tl5");
 
         _verifyRole(access, PROPOSER_ROLE, proposer, true, "tl6");
         _verifyRole(access, EXECUTOR_ROLE, proposer, true, "tl7");
         _verifyRole(access, CANCELLER_ROLE, proposer, true, "tl8");
-        _verifyRole(access, DEFAULT_ADMIN_ROLE, proposer, false, "tl9");
+
+        if (admin != proposer) {
+            _verifyRole(access, PROPOSER_ROLE, admin, false, "tl4");
+            _verifyRole(access, EXECUTOR_ROLE, admin, false, "tl5");
+            _verifyRole(access, DEFAULT_ADMIN_ROLE, proposer, false, "tl9");
+        }
 
         _verifyRole(access, DEFAULT_ADMIN_ROLE, factory, false, "tl10");
         _verifyRole(access, PROPOSER_ROLE, factory, false, "tl11");

@@ -36,7 +36,6 @@ contract VerifyVault is Script {
         if (proposer == address(0)) {
             proposer = vm.promptAddress("Timelock proposer");
         }
-        require(proposer != CONTROLLER, "admin proposer");
 
         VaultVerifier.Verification memory verification = VaultVerifier.Verification({
             factory: factory, created: created, vaultParams: _vaultParams(proposer), flexParams: _flexParams()

@@ -779,12 +779,14 @@ contract VaultFactoryTest is Test {
         TimelockController timelock = TimelockController(payable(created.timelock));
         assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), admin));
-        assertFalse(timelock.hasRole(timelock.PROPOSER_ROLE(), admin));
-        assertFalse(timelock.hasRole(timelock.EXECUTOR_ROLE(), admin));
         assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), proposer));
         assertTrue(timelock.hasRole(timelock.EXECUTOR_ROLE(), proposer));
         assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), proposer));
-        assertFalse(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), proposer));
+        if (admin != proposer) {
+            assertFalse(timelock.hasRole(timelock.PROPOSER_ROLE(), admin));
+            assertFalse(timelock.hasRole(timelock.EXECUTOR_ROLE(), admin));
+            assertFalse(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), proposer));
+        }
         assertFalse(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertFalse(timelock.hasRole(timelock.PROPOSER_ROLE(), address(factory)));
         assertFalse(timelock.hasRole(timelock.EXECUTOR_ROLE(), address(factory)));
@@ -943,12 +945,20 @@ contract VaultFactoryTest is Test {
         assertEq(usdt.allowance(address(factory), created.vault), 0);
     }
 
-    function testCreateVaultRevertsWhenAdminIsProposer() public {
+    function testCreateVaultAllowsAdminToBeProposer() public {
         IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
         params.proposer = params.admin;
 
-        vm.expectRevert(IVaultFactory.InvalidTimelockRoles.selector);
-        factory.createVault(params, _emptyFlexParams());
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        vm.stopPrank();
+
+        TimelockController timelock = TimelockController(payable(created.timelock));
+        assertTrue(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), admin));
+        assertTrue(timelock.hasRole(timelock.PROPOSER_ROLE(), admin));
+        assertTrue(timelock.hasRole(timelock.EXECUTOR_ROLE(), admin));
+        assertTrue(timelock.hasRole(timelock.CANCELLER_ROLE(), admin));
     }
 
     function testCreateVaultRevertsWhenBootstrapSharesMismatch() public {

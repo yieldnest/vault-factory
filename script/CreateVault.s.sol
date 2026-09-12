@@ -31,7 +31,6 @@ contract CreateVault is Script {
         if (proposer == address(0)) {
             proposer = vm.promptAddress("Timelock proposer");
         }
-        require(proposer != CONTROLLER, "admin proposer");
 
         IVaultFactory.VaultParams memory params = IVaultFactory.VaultParams({
             admin: CONTROLLER,

@@ -6,8 +6,8 @@ This document defines the role actors and final role ownership for a vault facto
 
 Each vault deployment has these role actors:
 
-- **ADMIN:** governance address for the deployment. This address must be distinct from PROPOSER.
-- **PROPOSER:** governance operations multisig for proposing and executing timelocked operations. This address must be distinct from ADMIN.
+- **ADMIN:** governance address for the deployment.
+- **PROPOSER:** governance operations multisig for proposing and executing timelocked operations.
 - **Timelock:** the per-vault OpenZeppelin `TimelockController` deployed by the factory.
 - **OPS multisig:** operational multisig for day-to-day processor and pause operations.
 - **RESOLVER multisig:** withdrawal operations multisig for resolving async withdrawal requests.

@@ -198,8 +198,6 @@ contract VaultFactory is IVaultFactory {
             revert ZeroAddress();
         }
 
-        if (params.admin == params.proposer) revert InvalidTimelockRoles();
-
         uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         if (baseAssetDecimals > VAULT_DECIMALS) revert AssetDecimalsTooHigh(baseAssetDecimals);
         uint256 minBootstrapAmount = 10 ** baseAssetDecimals;

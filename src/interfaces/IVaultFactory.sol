@@ -73,7 +73,6 @@ interface IVaultFactory {
     error BootstrapSharesMismatch(uint256 actualShares, uint256 expectedShares);
     error BootstrapAmountTooLow(uint256 amount, uint256 minimum);
     error MissingRegistryValue(bytes32 key);
-    error InvalidTimelockRoles();
     error UnknownDeployment(bytes32 deploymentId);
     error Unauthorized();
     error ZeroAddress();

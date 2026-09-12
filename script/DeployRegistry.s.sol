@@ -20,7 +20,6 @@ contract DeployRegistry is Script {
 
         require(admin != address(0), "admin");
         require(proposer != address(0), "proposer");
-        require(admin != proposer, "admin proposer");
 
         vm.startBroadcast();
         (, address deployer,) = vm.readCallers();
