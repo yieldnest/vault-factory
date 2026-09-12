@@ -331,6 +331,9 @@ contract MockWrappedToken {
 }
 
 contract MockWithdrawalRequest {
+    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+
     address public token;
     address public defaultAdmin;
     address public resolver;
@@ -341,6 +344,12 @@ contract MockWithdrawalRequest {
     address public requestPolicy;
     uint256 public maxDataLength;
     bool public initialized;
+    mapping(bytes32 => mapping(address => bool)) public hasRole;
+
+    modifier onlyRole(bytes32 role) {
+        require(hasRole[role][msg.sender], "role");
+        _;
+    }
 
     function initialize(
         address token_,
@@ -364,6 +373,20 @@ contract MockWithdrawalRequest {
         withdrawer = withdrawer_;
         requestPolicy = requestPolicy_;
         maxDataLength = maxDataLength_;
+        hasRole[DEFAULT_ADMIN_ROLE][defaultAdmin_] = true;
+        hasRole[PAUSER_ROLE][pauser_] = true;
+    }
+
+    function grantRole(bytes32 role, address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        hasRole[role][account] = true;
+        if (role == DEFAULT_ADMIN_ROLE) {
+            defaultAdmin = account;
+        }
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) external {
+        require(msg.sender == callerConfirmation, "confirmation");
+        hasRole[role][callerConfirmation] = false;
     }
 }
 
@@ -813,6 +836,8 @@ contract VaultFactoryTest is Test {
         assertTrue(vault.hasRole(vault.PROCESSOR_ROLE(), processor));
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), pauser));
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), unpauser));
+        assertTrue(vault.hasRole(vault.PAUSER_ROLE(), admin));
+        assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), admin));
         assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), feeManager));
         assertTrue(vault.hasRole(vault.PROVIDER_MANAGER_ROLE(), created.timelock));
         assertTrue(vault.hasRole(vault.BUFFER_MANAGER_ROLE(), created.timelock));
@@ -860,6 +885,10 @@ contract VaultFactoryTest is Test {
         assertEq(withdrawalRequest.resolver(), resolver);
         assertEq(withdrawalRequest.configurationManager(), created.timelock);
         assertEq(withdrawalRequest.pauser(), pauser);
+        assertTrue(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(withdrawalRequest.hasRole(withdrawalRequest.PAUSER_ROLE(), pauser));
+        assertTrue(withdrawalRequest.hasRole(withdrawalRequest.PAUSER_ROLE(), admin));
+        assertFalse(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertEq(withdrawalRequest.bagFactory(), created.bagFactory);
         assertEq(withdrawalRequest.withdrawer(), created.withdrawer);
         assertEq(withdrawalRequest.requestPolicy(), created.requestPolicy);
@@ -1112,6 +1141,8 @@ contract VaultFactoryTest is Test {
         assertTrue(strategy.hasRole(strategy.PROCESSOR_ROLE(), processor));
         assertTrue(strategy.hasRole(strategy.PAUSER_ROLE(), pauser));
         assertTrue(strategy.hasRole(strategy.UNPAUSER_ROLE(), unpauser));
+        assertTrue(strategy.hasRole(strategy.PAUSER_ROLE(), admin));
+        assertTrue(strategy.hasRole(strategy.UNPAUSER_ROLE(), admin));
         assertTrue(strategy.hasRole(strategy.PROVIDER_MANAGER_ROLE(), created.timelock));
         assertTrue(strategy.hasRole(strategy.ASSET_MANAGER_ROLE(), created.timelock));
         assertTrue(strategy.hasRole(strategy.BUFFER_MANAGER_ROLE(), created.timelock));

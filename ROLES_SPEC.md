@@ -89,6 +89,8 @@ The timelock holds:
 
 The timelock does not hold the operational roles on the Main Vault.
 
+The ADMIN multisig also holds `PAUSER_ROLE` and `UNPAUSER_ROLE` on the Main Vault as a supervisory incident-control path.
+
 ### Main Vault ProxyAdmin
 
 The timelock is the owner of the Main Vault `ProxyAdmin`.
@@ -105,6 +107,8 @@ The timelock holds:
 - `CONFIGURATION_MANAGER_ROLE`
 
 The timelock is the owner of the WithdrawalRequest `ProxyAdmin`.
+
+The ADMIN multisig also holds `PAUSER_ROLE` on the WithdrawalRequest. The WithdrawalRequest uses a single `PAUSER_ROLE` for both pause and unpause behavior.
 
 ### BaseWithdrawer
 
@@ -133,6 +137,8 @@ When a FlexStrategy is deployed, the timelock holds:
 - `ACCOUNTING_MODULE_MANAGER_ROLE`
 
 The timelock is the owner of the FlexStrategy `ProxyAdmin`.
+
+The ADMIN multisig also holds `PAUSER_ROLE` and `UNPAUSER_ROLE` on the FlexStrategy as a supervisory incident-control path.
 
 ### AccountingToken
 

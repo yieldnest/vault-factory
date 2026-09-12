@@ -165,6 +165,7 @@ library VaultVerifierLib {
         _verifyRole(request, RESOLVER_ROLE, params.resolver, true, "request resolver");
         _verifyRole(request, CONFIGURATION_MANAGER_ROLE, created.timelock, true, "request config");
         _verifyRole(request, PAUSER_ROLE, params.pauser, true, "request pauser");
+        _verifyRole(request, PAUSER_ROLE, params.admin, true, "request admin pauser");
         _verifyRole(request, DEFAULT_ADMIN_ROLE, verification.factory, false, "request dangling admin");
         _verifyRole(request, CONFIGURATION_MANAGER_ROLE, verification.factory, false, "request dangling config");
 
@@ -327,6 +328,8 @@ library VaultVerifierLib {
         _verifyRole(vault, PROCESSOR_ROLE, params.processor, true, "vault processor role");
         _verifyRole(vault, PAUSER_ROLE, params.pauser, true, "vault pauser role");
         _verifyRole(vault, UNPAUSER_ROLE, params.unpauser, true, "vault unpauser role");
+        _verifyRole(vault, PAUSER_ROLE, params.admin, true, "vault admin pauser role");
+        _verifyRole(vault, UNPAUSER_ROLE, params.admin, true, "vault admin unpauser role");
         _verifyRole(vault, FEE_MANAGER_ROLE, params.feeManager, true, "vault fee role");
         _verifyRole(vault, PROVIDER_MANAGER_ROLE, created.timelock, true, "vault provider role");
         _verifyRole(vault, BUFFER_MANAGER_ROLE, created.timelock, true, "vault buffer role");
@@ -358,6 +361,8 @@ library VaultVerifierLib {
         _verifyRole(strategy, PROCESSOR_ROLE, params.processor, true, "strategy processor role");
         _verifyRole(strategy, PAUSER_ROLE, params.pauser, true, "strategy pauser role");
         _verifyRole(strategy, UNPAUSER_ROLE, params.unpauser, true, "strategy unpauser role");
+        _verifyRole(strategy, PAUSER_ROLE, params.admin, true, "strategy admin pauser role");
+        _verifyRole(strategy, UNPAUSER_ROLE, params.admin, true, "strategy admin unpauser role");
         _verifyRole(strategy, PROVIDER_MANAGER_ROLE, created.timelock, true, "strategy provider role");
         _verifyRole(strategy, ASSET_MANAGER_ROLE, created.timelock, true, "strategy asset role");
         _verifyRole(strategy, BUFFER_MANAGER_ROLE, created.timelock, true, "strategy buffer role");

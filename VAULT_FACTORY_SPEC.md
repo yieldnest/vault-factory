@@ -94,6 +94,8 @@ These are the key parameters that are used when deploying a new RWA vault via th
 - **unpauser:**  
   The address allowed to unpause the vault after it has been paused.
 
+The `admin` address is also granted the deployed systems' pause authority as a supervisory incident-control path. On the Main Vault and FlexStrategy this means `PAUSER_ROLE` and `UNPAUSER_ROLE`; on the WithdrawalRequest this means `PAUSER_ROLE`, which covers both pause and unpause behavior.
+
 - **feeManager:**  
   The address responsible for managing and collecting any fees associated with the vault.
 
@@ -197,7 +199,7 @@ Additional vault parameters:
 - **maxDataLength:**
   The maximum bytes allowed in withdrawal request metadata.
 
-The WithdrawalRequest pauser is the same `pauser` address used for the Main Vault (the WithdrawalRequest has a single `PAUSER_ROLE` covering both pause and unpause; the timelock can grant it to additional accounts later).
+The WithdrawalRequest pauser is the same `pauser` address used for the Main Vault. The `admin` address also receives `PAUSER_ROLE`. The WithdrawalRequest has a single `PAUSER_ROLE` covering both pause and unpause; the timelock can grant it to additional accounts later.
 
 ### Flex strategy - OPTIONAL
 
@@ -209,7 +211,7 @@ When `deployStrategy` is true, the factory deploys the full flex strategy system
 - **RewardsSweeper** — optional, controlled by the `deployRewardsSweeper` flag. When deployed it is wired to the accounting module and granted `REWARDS_PROCESSOR_ROLE` on it; its implementation is only read from the registry when the flag is set.
 - **FixedRateProvider** — the strategy's rate provider, pricing the base asset and accounting token at par.
 
-Role assignment mirrors the Main Vault policy: every critical role (`DEFAULT_ADMIN_ROLE` and all manager roles, `SAFE_MANAGER_ROLE`) goes to the deployment timelock; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to the multisig. All temporary factory roles are renounced.
+Role assignment mirrors the Main Vault policy: every critical role (`DEFAULT_ADMIN_ROLE` and all manager roles, `SAFE_MANAGER_ROLE`) goes to the deployment timelock; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `PAUSER_ROLE` and `UNPAUSER_ROLE` also go to `admin`; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to the multisig. All temporary factory roles are renounced.
 
 #### Parameters
 

@@ -226,6 +226,8 @@ contract VaultFactoryIntegrationTest is Test {
         assertTrue(vault.hasRole(vault.PROCESSOR_ROLE(), TestConstants.PROCESSOR), "processor");
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), TestConstants.PAUSER), "pauser");
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), TestConstants.UNPAUSER), "unpauser");
+        assertTrue(vault.hasRole(vault.PAUSER_ROLE(), TestConstants.ADMIN), "admin pauser");
+        assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), TestConstants.ADMIN), "admin unpauser");
         assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), TestConstants.FEE_MANAGER), "fee manager");
         assertTrue(vault.hasRole(vault.PROVIDER_MANAGER_ROLE(), created.timelock), "provider manager");
         assertTrue(vault.hasRole(vault.BUFFER_MANAGER_ROLE(), created.timelock), "buffer manager");
@@ -252,6 +254,7 @@ contract VaultFactoryIntegrationTest is Test {
         assertTrue(request.hasRole(request.RESOLVER_ROLE(), TestConstants.RESOLVER), "request resolver");
         assertTrue(request.hasRole(request.CONFIGURATION_MANAGER_ROLE(), created.timelock), "request config manager");
         assertTrue(request.hasRole(request.PAUSER_ROLE(), TestConstants.PAUSER), "request pauser");
+        assertTrue(request.hasRole(request.PAUSER_ROLE(), TestConstants.ADMIN), "request admin pauser");
 
         assertEq(withdrawer.token(), created.vault, "withdrawer token");
         assertEq(withdrawer.withdrawalRequest(), created.withdrawalRequest, "withdrawer request");

@@ -17,6 +17,7 @@ library WithdrawalSystemDeployer {
     struct Config {
         address vault;
         address timelock;
+        address admin;
         address resolver;
         address pauser;
         uint256 minWithdrawalAmount;
@@ -48,7 +49,7 @@ library WithdrawalSystemDeployer {
         IWithdrawalRequest(withdrawals.withdrawalRequest)
             .initialize(
                 cfg.vault,
-                cfg.timelock,
+                address(this),
                 cfg.resolver,
                 cfg.timelock,
                 cfg.pauser,
@@ -57,5 +58,9 @@ library WithdrawalSystemDeployer {
                 withdrawals.requestPolicy,
                 cfg.maxDataLength
             );
+        IWithdrawalRequest request = IWithdrawalRequest(withdrawals.withdrawalRequest);
+        request.grantRole(request.DEFAULT_ADMIN_ROLE(), cfg.timelock);
+        request.grantRole(request.PAUSER_ROLE(), cfg.admin);
+        request.renounceRole(request.DEFAULT_ADMIN_ROLE(), address(this));
     }
 }

@@ -31,6 +31,17 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     uint64 public constant BASE_WITHDRAWAL_FEE = 0;
     /// @notice 18-decimal base units per whole default-asset token, i.e. par.
     uint256 public constant PROVIDER_RATE = 1e18;
+    bytes32 internal constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 internal constant PROCESSOR_ROLE = keccak256("PROCESSOR_ROLE");
+    bytes32 internal constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 internal constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
+    bytes32 internal constant PROVIDER_MANAGER_ROLE = keccak256("PROVIDER_MANAGER_ROLE");
+    bytes32 internal constant BUFFER_MANAGER_ROLE = keccak256("BUFFER_MANAGER_ROLE");
+    bytes32 internal constant ASSET_MANAGER_ROLE = keccak256("ASSET_MANAGER_ROLE");
+    bytes32 internal constant PROCESSOR_MANAGER_ROLE = keccak256("PROCESSOR_MANAGER_ROLE");
+    bytes32 internal constant HOOKS_MANAGER_ROLE = keccak256("HOOKS_MANAGER_ROLE");
+    bytes32 internal constant FEE_MANAGER_ROLE = keccak256("FEE_MANAGER_ROLE");
+    bytes32 internal constant ASSET_WITHDRAWER_ROLE = keccak256("ASSET_WITHDRAWER_ROLE");
 
     struct Assets {
         address effectiveBaseAsset;
@@ -156,9 +167,10 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
             FlexStrategyDeployer.configureVaultRules(created.vault, created.flexStrategy, params.baseAsset);
         }
 
-        WithdrawalSystem memory withdrawals = deployWithdrawalSystem(
+        WithdrawalSystem memory withdrawals = _deployWithdrawalSystem(
             created.vault,
             created.timelock,
+            params.admin,
             params.resolver,
             params.pauser,
             params.minWithdrawalAmount,
@@ -168,7 +180,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         created.withdrawer = withdrawals.withdrawer;
         created.bagFactory = withdrawals.bagFactory;
         created.requestPolicy = withdrawals.requestPolicy;
-        vault.grantRole(vault.ASSET_WITHDRAWER_ROLE(), withdrawals.withdrawer);
+        vault.grantRole(ASSET_WITHDRAWER_ROLE, withdrawals.withdrawer);
 
         _bootstrap(vault, params);
         if (flexParams.deployStrategy) {
@@ -276,17 +288,19 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         // updates (e.g. granting or revoking PROVIDER_MANAGER_ROLE or ASSET_MANAGER_ROLE) through
         // a scheduled, delayed timelock operation. Granting it to any other account would let
         // that account rewire vault roles instantly, bypassing the timelock entirely.
-        vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), timelock);
-        vault.grantRole(vault.PROCESSOR_ROLE(), params.processor);
-        vault.grantRole(vault.PAUSER_ROLE(), params.pauser);
-        vault.grantRole(vault.UNPAUSER_ROLE(), params.unpauser);
-        vault.grantRole(vault.FEE_MANAGER_ROLE(), params.feeManager);
+        vault.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        vault.grantRole(PROCESSOR_ROLE, params.processor);
+        vault.grantRole(PAUSER_ROLE, params.pauser);
+        vault.grantRole(UNPAUSER_ROLE, params.unpauser);
+        vault.grantRole(PAUSER_ROLE, params.admin);
+        vault.grantRole(UNPAUSER_ROLE, params.admin);
+        vault.grantRole(FEE_MANAGER_ROLE, params.feeManager);
 
-        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.ASSET_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), timelock);
-        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), timelock);
+        vault.grantRole(PROVIDER_MANAGER_ROLE, timelock);
+        vault.grantRole(BUFFER_MANAGER_ROLE, timelock);
+        vault.grantRole(ASSET_MANAGER_ROLE, timelock);
+        vault.grantRole(PROCESSOR_MANAGER_ROLE, timelock);
+        vault.grantRole(HOOKS_MANAGER_ROLE, timelock);
 
         // The effective base asset is active only when it is itself the ERC4626 default asset
         // (the 18-decimal, no-wrapper case), which must accept deposits. A wrapper is an
@@ -325,22 +339,22 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     /// @dev The factory's setup roles on the vault. DEFAULT_ADMIN_ROLE is not granted here - the
     /// factory receives it in the vault initializer - but it is renounced below with the rest.
     function _grantTemporaryRoles(IVault vault) internal {
-        vault.grantRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.BUFFER_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.ASSET_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.HOOKS_MANAGER_ROLE(), address(this));
-        vault.grantRole(vault.UNPAUSER_ROLE(), address(this));
+        vault.grantRole(PROVIDER_MANAGER_ROLE, address(this));
+        vault.grantRole(BUFFER_MANAGER_ROLE, address(this));
+        vault.grantRole(ASSET_MANAGER_ROLE, address(this));
+        vault.grantRole(PROCESSOR_MANAGER_ROLE, address(this));
+        vault.grantRole(HOOKS_MANAGER_ROLE, address(this));
+        vault.grantRole(UNPAUSER_ROLE, address(this));
     }
 
     function _renounceTemporaryRoles(IVault vault) internal {
-        vault.renounceRole(vault.DEFAULT_ADMIN_ROLE(), address(this));
-        vault.renounceRole(vault.PROVIDER_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.BUFFER_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.ASSET_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.PROCESSOR_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.HOOKS_MANAGER_ROLE(), address(this));
-        vault.renounceRole(vault.UNPAUSER_ROLE(), address(this));
+        vault.renounceRole(DEFAULT_ADMIN_ROLE, address(this));
+        vault.renounceRole(PROVIDER_MANAGER_ROLE, address(this));
+        vault.renounceRole(BUFFER_MANAGER_ROLE, address(this));
+        vault.renounceRole(ASSET_MANAGER_ROLE, address(this));
+        vault.renounceRole(PROCESSOR_MANAGER_ROLE, address(this));
+        vault.renounceRole(HOOKS_MANAGER_ROLE, address(this));
+        vault.renounceRole(UNPAUSER_ROLE, address(this));
     }
 
     /// FLEX STRATEGY ///
@@ -355,6 +369,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         cfg.vault = vault;
         cfg.effectiveBaseAsset = assets.effectiveBaseAsset;
         cfg.timelock = timelock;
+        cfg.admin = params.admin;
         cfg.baseAsset = params.baseAsset;
         cfg.baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         cfg.alwaysComputeTotalAssets = flexParams.alwaysComputeTotalAssets;
@@ -412,6 +427,20 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         uint256 minWithdrawalAmount,
         uint256 maxDataLength
     ) public returns (WithdrawalSystem memory withdrawals) {
+        withdrawals = _deployWithdrawalSystem(
+            vault, timelock, timelock, resolver, pauser, minWithdrawalAmount, maxDataLength
+        );
+    }
+
+    function _deployWithdrawalSystem(
+        address vault,
+        address timelock,
+        address admin,
+        address resolver,
+        address pauser,
+        uint256 minWithdrawalAmount,
+        uint256 maxDataLength
+    ) internal returns (WithdrawalSystem memory withdrawals) {
         if (vault == address(0) || timelock == address(0) || resolver == address(0) || pauser == address(0)) {
             revert ZeroAddress();
         }
@@ -420,6 +449,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
             WithdrawalSystemDeployer.Config({
                 vault: vault,
                 timelock: timelock,
+                admin: admin,
                 resolver: resolver,
                 pauser: pauser,
                 minWithdrawalAmount: minWithdrawalAmount,

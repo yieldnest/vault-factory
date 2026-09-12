@@ -44,6 +44,7 @@ library FlexStrategyDeployer {
         address vault;
         address effectiveBaseAsset;
         address timelock;
+        address admin;
         address baseAsset;
         uint8 baseAssetDecimals;
         bool alwaysComputeTotalAssets;
@@ -183,6 +184,8 @@ library FlexStrategyDeployer {
         strategy.grantRole(PROCESSOR_ROLE, cfg.processor);
         strategy.grantRole(PAUSER_ROLE, cfg.pauser);
         strategy.grantRole(UNPAUSER_ROLE, cfg.unpauser);
+        strategy.grantRole(PAUSER_ROLE, cfg.admin);
+        strategy.grantRole(UNPAUSER_ROLE, cfg.admin);
         strategy.grantRole(PROVIDER_MANAGER_ROLE, cfg.timelock);
         strategy.grantRole(ASSET_MANAGER_ROLE, cfg.timelock);
         strategy.grantRole(BUFFER_MANAGER_ROLE, cfg.timelock);
