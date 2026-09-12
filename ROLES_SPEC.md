@@ -205,3 +205,13 @@ When a FlexStrategy is deployed, the accounting processor holds:
 - `REWARDS_PROCESSOR_ROLE` on the AccountingModule
 
 When a RewardsSweeper is deployed, the RewardsSweeper also holds `REWARDS_PROCESSOR_ROLE` on the AccountingModule.
+
+## NEEDS REVIEW
+
+The `LOSS_PROCESSOR_ROLE` assignment needs revision. The current specification assigns it to the flex strategy multisig, but this should be reviewed against the intended loss-processing workflow, signer set, and operational risk model.
+
+The named actors in this document describe responsibilities, not necessarily distinct Safe instances. In practice, OPS, RESOLVER, PROPOSER, PAUSER, and UNPAUSER can be the same multisig or multiple multisigs depending on the deployment's operational workflow.
+
+OPS can be a distinct actor because processor operations may need automation or frequent execution. The PROPOSER should always be a manual multisig because it initiates governance actions that take effect after the timelock delay.
+
+PAUSER and UNPAUSER may also deserve separate treatment. PAUSER can be automated or semi-automated to react quickly to incidents, while UNPAUSER should generally be manual because restoring operation after an incident requires human review.
