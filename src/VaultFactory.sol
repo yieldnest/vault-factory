@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
@@ -20,7 +21,7 @@ import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 
 contract NonceMarker {}
 
-contract VaultFactory is IVaultFactory {
+contract VaultFactory is IVaultFactory, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// STORAGE ///
@@ -60,6 +61,7 @@ contract VaultFactory is IVaultFactory {
 
     function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
         external
+        nonReentrant
         returns (CreatedVault memory created)
     {
         (bytes32 deploymentId,) = _startCreateVault(msg.sender, params, flexParams);
@@ -68,12 +70,13 @@ contract VaultFactory is IVaultFactory {
 
     function startCreateVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
         external
+        nonReentrant
         returns (bytes32 deploymentId, CreatedVault memory created)
     {
         return _startCreateVault(msg.sender, params, flexParams);
     }
 
-    function resumeCreateVault(bytes32 deploymentId) external returns (CreatedVault memory created) {
+    function resumeCreateVault(bytes32 deploymentId) external nonReentrant returns (CreatedVault memory created) {
         return _resumeCreateVault(deploymentId, msg.sender);
     }
 

@@ -120,6 +120,58 @@ contract MockUSDTToken {
     }
 }
 
+contract MockReentrantToken {
+    string public name = "Reentrant Asset";
+    string public symbol = "RNT";
+    uint8 public immutable decimals = 18;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    bytes32 public deploymentId;
+    bytes public reentrantRevertData;
+    bool public shouldReenter;
+
+    constructor(uint256 balance) {
+        balanceOf[address(this)] = balance;
+    }
+
+    function startAndResume(IVaultFactory factory, IVaultFactory.VaultParams memory params)
+        external
+        returns (IVaultFactory.CreatedVault memory created)
+    {
+        IVaultFactory.FlexStrategyParams memory flexParams;
+        (deploymentId,) = factory.startCreateVault(params, flexParams);
+        allowance[address(this)][address(factory)] = params.bootstrapAmount;
+        shouldReenter = true;
+        created = factory.resumeCreateVault(deploymentId);
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        uint256 currentAllowance = allowance[from][msg.sender];
+        require(currentAllowance >= amount, "allowance");
+        require(balanceOf[from] >= amount, "balance");
+
+        if (shouldReenter) {
+            shouldReenter = false;
+            try IVaultFactory(msg.sender).resumeCreateVault(deploymentId) {
+                revert("reentry succeeded");
+            } catch (bytes memory reason) {
+                reentrantRevertData = reason;
+            }
+        }
+
+        allowance[from][msg.sender] = currentAllowance - amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
 contract MockVault {
     uint8 public constant VAULT_DECIMALS = 18;
 
@@ -1205,6 +1257,19 @@ contract VaultFactoryTest is Test {
         vm.prank(address(0xBAD));
         vm.expectRevert(IVaultFactory.Unauthorized.selector);
         factory.resumeCreateVault(deploymentId);
+    }
+
+    function testResumeCreateVaultRejectsReentryFromBootstrapAsset() public {
+        MockReentrantToken reentrantAsset = new MockReentrantToken(1 ether);
+
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        params.baseAsset = address(reentrantAsset);
+
+        IVaultFactory.CreatedVault memory created = reentrantAsset.startAndResume(factory, params);
+
+        assertEq(MockVault(created.vault).shareBalance(bootstrapReceiver), 1 ether);
+        assertEq(reentrantAsset.balanceOf(created.vault), 1 ether);
+        assertEq(bytes4(reentrantAsset.reentrantRevertData()), bytes4(keccak256("ReentrancyGuardReentrantCall()")));
     }
 
     function testCreateVaultDeploysFlexStrategyWithoutRewardsSweeper() public {
