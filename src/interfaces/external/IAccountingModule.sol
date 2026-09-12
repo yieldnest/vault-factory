@@ -15,4 +15,12 @@ interface IAccountingModule {
 
     function grantRole(bytes32 role, address account) external;
     function renounceRole(bytes32 role, address callerConfirmation) external;
+
+    function baseAsset() external view returns (address);
+    function strategy() external view returns (address);
+    function accountingToken() external view returns (address);
+    function safe() external view returns (address);
+    function targetApy() external view returns (uint256);
+    function lowerBound() external view returns (uint256);
+    function cooldownSeconds() external view returns (uint16);
 }

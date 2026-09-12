@@ -12,4 +12,5 @@ interface IAccountingToken {
 
     function TRACKED_ASSET() external view returns (address);
     function decimals() external view returns (uint8);
+    function accountingModule() external view returns (address);
 }

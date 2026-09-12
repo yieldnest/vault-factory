@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IVault} from "src/interfaces/external/IVault.sol";
 
-interface IFlexStrategy {
+interface IFlexStrategy is IVault {
     function initialize(
         address admin,
         address accountingModuleManager,
@@ -17,14 +17,10 @@ interface IFlexStrategy {
         bool alwaysComputeTotalAssets
     ) external;
 
-    function grantRole(bytes32 role, address account) external;
-    function renounceRole(bytes32 role, address callerConfirmation) external;
-
     function setHasAllocator(bool hasAllocators_) external;
     function setAccountingModule(address accountingModule_) external;
     function setHooks(address hooks_) external;
-    function setProcessorRule(address target, bytes4 functionSig, IVault.FunctionRule calldata rule) external;
-    function processAccounting() external;
-    function unpause() external;
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+
+    function accountingModule() external view returns (address);
+    function getHasAllocator() external view returns (bool);
 }

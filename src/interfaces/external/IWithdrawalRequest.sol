@@ -13,4 +13,10 @@ interface IWithdrawalRequest {
         address requestPolicy_,
         uint256 maxDataLength_
     ) external;
+
+    function token() external view returns (address);
+    function bagFactory() external view returns (address);
+    function withdrawer() external view returns (address);
+    function requestPolicy() external view returns (address);
+    function maxDataLength() external view returns (uint256);
 }

@@ -52,4 +52,19 @@ interface IVault {
     function setProcessorRule(address target, bytes4 functionSig, FunctionRule calldata rule) external;
     function processAccounting() external;
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
+    function asset() external view returns (address);
+    function countNativeAsset() external view returns (bool);
+    function alwaysComputeTotalAssets() external view returns (bool);
+    function baseWithdrawalFee() external view returns (uint64);
+    function defaultAssetIndex() external view returns (uint256);
+    function provider() external view returns (address);
+    function buffer() external view returns (address);
+    function paused() external view returns (bool);
+    function hooks() external view returns (address);
+    function getAssets() external view returns (address[] memory);
+    function getProcessorRule(address contractAddress, bytes4 funcSig) external view returns (FunctionRule memory);
 }
