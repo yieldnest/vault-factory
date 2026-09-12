@@ -18,9 +18,32 @@ import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/inte
 
 interface IVaultFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function previewWithdraw(uint256 assets) external view returns (uint256 shares);
     function processor(address[] calldata targets, uint256[] calldata values, bytes[] calldata data)
         external
         returns (bytes[] memory);
+}
+
+interface IWithdrawalRequestFlow {
+    struct Request {
+        address bag;
+        uint256 amountLocked;
+        address[] assetsRedeemed;
+        uint256 rateAtRequest;
+        bytes data;
+    }
+
+    function requestWithdrawal(uint256 amount, address receiver) external returns (uint256 id);
+    function resolveWithdrawalRequest(uint256 id, address asset, uint256 assets) external returns (uint256 amountBurned);
+    function requests(uint256 id) external view returns (Request memory request);
+    function ownerOf(uint256 id) external view returns (address owner);
+    function burn(uint256 id) external;
+}
+
+interface IBagFlow {
+    function claim(address[] calldata assets, address payable recipient, uint256[] calldata amounts)
+        external
+        returns (uint256[] memory);
 }
 
 interface IStrategyFlow {
@@ -122,6 +145,115 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
     }
 
+    function test_Flex_OffRamp_Returns_Funds_And_Resolver_Satisfies_Withdrawals() public {
+        uint256 userDeposit = 3e6;
+        uint256 userWithdrawalAssets = 1e6;
+        uint256 totalDeposit = userDeposit * 2;
+        uint256 returnedAssets = userWithdrawalAssets * 2;
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.approve, (created.accountingModule, type(uint256).max))
+        );
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+        );
+
+        uint256 userOneShares = _depositToVault(TestConstants.DEPOSITOR, userDeposit);
+        uint256 userTwoShares = _depositToVault(TestConstants.DEPOSITOR_TWO, userDeposit);
+        assertGt(userOneShares, 0, "user one shares");
+        assertEq(userTwoShares, userOneShares, "equal deposit shares");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + totalDeposit, "vault funded");
+
+        uint256 safeBalanceBeforeAllocation = IERC20(TestConstants.USDC).balanceOf(address(safe));
+        _moveVaultAssetsToFlexStrategy(totalDeposit);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault allocated");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceBeforeAllocation + totalDeposit,
+            "safe received allocation"
+        );
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, totalDeposit))
+        );
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), totalDeposit, "off-ramp received");
+        uint256 safeBalanceAfterOffRamp = IERC20(TestConstants.USDC).balanceOf(address(safe));
+
+        vm.prank(TestConstants.OFF_RAMP);
+        IERC20(TestConstants.USDC).transfer(address(safe), returnedAssets);
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceAfterOffRamp + returnedAssets,
+            "safe receives returned funds"
+        );
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault unchanged before return");
+
+        _returnFlexStrategyAssetsToVault(returnedAssets);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + returnedAssets, "vault repaid");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterOffRamp, "safe returned funds");
+
+        uint256 userOneWithdrawalShares = IVaultFlow(created.vault).previewWithdraw(userWithdrawalAssets);
+        uint256 userTwoWithdrawalShares = userOneWithdrawalShares - 1;
+        assertLe(userOneWithdrawalShares, userOneShares, "user one withdrawal shares available");
+        assertLe(userTwoWithdrawalShares, userTwoShares, "user two withdrawal shares available");
+
+        _requestResolveClaimWithdrawals(userOneWithdrawalShares, userTwoWithdrawalShares, userWithdrawalAssets);
+    }
+
+    function _requestResolveClaimWithdrawals(
+        uint256 userOneWithdrawalShares,
+        uint256 userTwoWithdrawalShares,
+        uint256 userWithdrawalAssets
+    ) internal {
+        uint256 requestIdOne = _requestWithdrawal(TestConstants.DEPOSITOR, userOneWithdrawalShares);
+        uint256 requestIdTwo = _requestWithdrawal(TestConstants.DEPOSITOR_TWO, userTwoWithdrawalShares);
+
+        IWithdrawalRequestFlow request = IWithdrawalRequestFlow(created.withdrawalRequest);
+        IWithdrawalRequestFlow.Request memory requestOne = request.requests(requestIdOne);
+        IWithdrawalRequestFlow.Request memory requestTwo = request.requests(requestIdTwo);
+        assertEq(request.ownerOf(requestIdOne), TestConstants.DEPOSITOR, "request one owner");
+        assertEq(request.ownerOf(requestIdTwo), TestConstants.DEPOSITOR_TWO, "request two owner");
+        assertEq(requestOne.amountLocked, userOneWithdrawalShares, "request one locked");
+        assertEq(requestTwo.amountLocked, userTwoWithdrawalShares, "request two locked");
+        assertEq(
+            IERC20(created.vault).balanceOf(created.withdrawalRequest),
+            userOneWithdrawalShares + userTwoWithdrawalShares,
+            "shares locked"
+        );
+
+        uint256 requestOneSharesBurned = _resolveWithdrawal(requestIdOne, userWithdrawalAssets);
+        uint256 requestTwoSharesBurned = _resolveWithdrawal(requestIdTwo, userWithdrawalAssets);
+        assertEq(requestOneSharesBurned, userOneWithdrawalShares, "request one shares burned");
+        assertEq(requestTwoSharesBurned, userTwoWithdrawalShares, "request two shares burned");
+
+        requestOne = request.requests(requestIdOne);
+        requestTwo = request.requests(requestIdTwo);
+        assertEq(requestOne.amountLocked, 0, "request one resolved");
+        assertEq(requestTwo.amountLocked, 0, "request two resolved");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestOne.bag), userWithdrawalAssets, "bag one assets");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestTwo.bag), userWithdrawalAssets, "bag two assets");
+        assertEq(IERC20(created.vault).balanceOf(created.withdrawalRequest), 0, "shares burned");
+
+        _claimAndBurnRequest(TestConstants.DEPOSITOR, requestIdOne, requestOne.bag, userWithdrawalAssets);
+        _claimAndBurnRequest(TestConstants.DEPOSITOR_TWO, requestIdTwo, requestTwo.bag, userWithdrawalAssets);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR), userWithdrawalAssets, "user one paid");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR_TWO), userWithdrawalAssets, "user two paid"
+        );
+    }
+
     function test_Verifier_Accepts_Factory_Created_Flex_Vault() public {
         VaultVerifier verifier = new VaultVerifier();
         assertTrue(
@@ -151,6 +283,54 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
 
         vm.prank(TestConstants.PROCESSOR);
         IVaultFlow(created.vault).processor(targets, values, data);
+    }
+
+    function _returnFlexStrategyAssetsToVault(uint256 amount) internal {
+        address[] memory targets = new address[](1);
+        targets[0] = created.flexStrategy;
+
+        uint256[] memory values = new uint256[](1);
+
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSignature("withdraw(uint256,address,address)", amount, created.vault, created.vault);
+
+        vm.prank(TestConstants.PROCESSOR);
+        IVaultFlow(created.vault).processor(targets, values, data);
+    }
+
+    function _depositToVault(address depositor, uint256 amount) internal returns (uint256 shares) {
+        deal(TestConstants.USDC, depositor, amount);
+
+        vm.startPrank(depositor);
+        IERC20(TestConstants.USDC).approve(created.vault, amount);
+        shares = IVaultFlow(created.vault).deposit(amount, depositor);
+        vm.stopPrank();
+    }
+
+    function _requestWithdrawal(address user, uint256 shares) internal returns (uint256 requestId) {
+        vm.startPrank(user);
+        IERC20(created.vault).approve(created.withdrawalRequest, shares);
+        requestId = IWithdrawalRequestFlow(created.withdrawalRequest).requestWithdrawal(shares, user);
+        vm.stopPrank();
+    }
+
+    function _resolveWithdrawal(uint256 requestId, uint256 assets) internal returns (uint256 sharesBurned) {
+        vm.prank(TestConstants.RESOLVER);
+        sharesBurned = IWithdrawalRequestFlow(created.withdrawalRequest)
+            .resolveWithdrawalRequest(requestId, TestConstants.USDC, assets);
+    }
+
+    function _claimAndBurnRequest(address user, uint256 requestId, address bag, uint256 assets) internal {
+        address[] memory claimAssets = new address[](1);
+        claimAssets[0] = TestConstants.USDC;
+
+        uint256[] memory claimAmounts = new uint256[](1);
+        claimAmounts[0] = assets;
+
+        vm.startPrank(user);
+        IBagFlow(bag).claim(claimAssets, payable(user), claimAmounts);
+        IWithdrawalRequestFlow(created.withdrawalRequest).burn(requestId);
+        vm.stopPrank();
     }
 
     function _deployRegistry() internal returns (IRegistry deployedRegistry) {
