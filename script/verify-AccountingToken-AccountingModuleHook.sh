@@ -24,6 +24,7 @@ if [ -z "${ETHERSCAN_API_KEY:-}" ]; then
 fi
 
 CHAIN_ID="${CHAIN_ID:-1}"
+COMPILER_VERSION="${COMPILER_VERSION:-0.8.30}"
 WATCH_FLAG=("--watch")
 if [ "${VERIFY_WATCH:-true}" = "false" ]; then
   WATCH_FLAG=()
@@ -40,6 +41,7 @@ echo "Verifying AccountingToken implementation: ${ACCOUNTING_TOKEN_IMPL}"
 forge verify-contract "${ACCOUNTING_TOKEN_IMPL}" \
   "lib/yieldnest-flex-strategy/src/AccountingToken.sol:AccountingToken" \
   --chain-id "${CHAIN_ID}" \
+  --compiler-version "${COMPILER_VERSION}" \
   --etherscan-api-key "${ETHERSCAN_API_KEY}" \
   --constructor-args "$(cast abi-encode 'constructor(address)' "${ACCOUNTING_TOKEN_TRACKED_ASSET}")" \
   "${WATCH_FLAG[@]}"
@@ -48,6 +50,7 @@ echo "Verifying AccountingModuleHook: ${ACCOUNTING_MODULE_HOOK}"
 forge verify-contract "${ACCOUNTING_MODULE_HOOK}" \
   "lib/yieldnest-flex-strategy/src/hooks/AccountingModuleHook.sol:AccountingModuleHook" \
   --chain-id "${CHAIN_ID}" \
+  --compiler-version "${COMPILER_VERSION}" \
   --etherscan-api-key "${ETHERSCAN_API_KEY}" \
   --constructor-args "$(cast abi-encode 'constructor(address,address)' "${ACCOUNTING_MODULE_HOOK_VAULT}" "${ACCOUNTING_MODULE_HOOK_FLEX_STRATEGY}")" \
   "${WATCH_FLAG[@]}"
