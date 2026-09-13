@@ -21,13 +21,15 @@ The ADMIN is configured on the deployment timelock.
 The ADMIN holds these roles on the `TimelockController`:
 
 - `DEFAULT_ADMIN_ROLE`
+- `PROPOSER_ROLE`
+- `EXECUTOR_ROLE`
 - `CANCELLER_ROLE`
 
-The ADMIN is not the normal proposer or executor. It is the supervisory multisig that can intervene if the proposal flow needs to be stopped or reconfigured.
+The ADMIN is a supervisory multisig that can also schedule and execute timelocked operations.
 
 The ADMIN can cancel a pending proposal through `CANCELLER_ROLE`.
 
-The ADMIN can also revoke the PROPOSER multisig's `PROPOSER_ROLE` or `EXECUTOR_ROLE` through `DEFAULT_ADMIN_ROLE`.
+The ADMIN can revoke the PROPOSER multisig's `PROPOSER_ROLE` or `EXECUTOR_ROLE` through `DEFAULT_ADMIN_ROLE`.
 
 ## PROPOSER
 
@@ -37,7 +39,7 @@ The PROPOSER multisig holds these roles on the `TimelockController`:
 - `EXECUTOR_ROLE`
 - `CANCELLER_ROLE`
 
-The PROPOSER multisig does not hold `DEFAULT_ADMIN_ROLE`.
+The PROPOSER multisig does not hold `DEFAULT_ADMIN_ROLE` unless it is the same address as ADMIN.
 
 OpenZeppelin `TimelockController` grants `CANCELLER_ROLE` to every proposer during construction.
 
@@ -58,7 +60,13 @@ The intended workflow is:
 +----------+  <------------  +----------+                +-------------------+
                 delay elapses                    upgrades / config changes
 
-+-------+  cancel() / revoke PROPOSER_ROLE or EXECUTOR_ROLE
+          schedule() / execute() / cancel()
++-------+  -------------------------------->
+| ADMIN |                    +----------+
++-------+                    | Timelock |
+                             +----------+
+
++-------+  revoke PROPOSER_ROLE or EXECUTOR_ROLE
 | ADMIN |  ------------------------------------------------>
 +-------+                    +----------+
                              | Timelock |
@@ -75,7 +83,7 @@ Critical operations include, but are not limited to:
 - hook changes
 - manager role changes on controlled contracts
 
-The ADMIN multisig can intervene before execution by cancelling the proposal. If the PROPOSER multisig should no longer control the normal governance flow, the ADMIN multisig can revoke its `PROPOSER_ROLE` and/or `EXECUTOR_ROLE`.
+The ADMIN multisig can intervene before execution by cancelling the proposal, and can also schedule or execute timelocked operations directly. If the PROPOSER multisig should no longer control the normal governance flow, the ADMIN multisig can revoke its `PROPOSER_ROLE` and/or `EXECUTOR_ROLE`.
 
 ### Main Vault
 

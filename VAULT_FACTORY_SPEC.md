@@ -80,10 +80,10 @@ Provider changes remain a critical timelocked operation.
 These are the key parameters that are used when deploying a new RWA vault via the factory:
 
 - **admin:**  
-  The supervisory governance address for the deployment. It receives `DEFAULT_ADMIN_ROLE` and `CANCELLER_ROLE` on the deployment timelock, but does not receive the normal proposer or executor roles.
+  The supervisory governance address for the deployment. It receives `DEFAULT_ADMIN_ROLE`, `PROPOSER_ROLE`, `EXECUTOR_ROLE`, and `CANCELLER_ROLE` on the deployment timelock.
 
 - **proposer:**  
-  The governance operations address for the deployment timelock. It receives `PROPOSER_ROLE` and `EXECUTOR_ROLE` on the deployment timelock. OpenZeppelin `TimelockController` also grants `CANCELLER_ROLE` to every proposer. It can be the same address as `admin`; in that case the same address holds both supervisory and proposal/execution powers.
+  The governance operations address for the deployment timelock. It receives `PROPOSER_ROLE` and `EXECUTOR_ROLE` on the deployment timelock. OpenZeppelin `TimelockController` also grants `CANCELLER_ROLE` to every proposer. It can be the same address as `admin`.
 
 - **processor:**  
   The address that is authorized to process actions within the vault.
