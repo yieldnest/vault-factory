@@ -19,6 +19,7 @@ import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/inte
 interface IVaultFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     function previewWithdraw(uint256 assets) external view returns (uint256 shares);
+    function previewRedeem(uint256 shares) external view returns (uint256 assets);
     function processor(address[] calldata targets, uint256[] calldata values, bytes[] calldata data)
         external
         returns (bytes[] memory);
@@ -204,18 +205,16 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterOffRamp, "safe returned funds");
 
         uint256 userOneWithdrawalShares = IVaultFlow(created.vault).previewWithdraw(userWithdrawalAssets);
-        uint256 userTwoWithdrawalShares = userOneWithdrawalShares - 1;
+        uint256 userTwoWithdrawalShares = userOneWithdrawalShares / 2;
         assertLe(userOneWithdrawalShares, userOneShares, "user one withdrawal shares available");
         assertLe(userTwoWithdrawalShares, userTwoShares, "user two withdrawal shares available");
 
-        _requestResolveClaimWithdrawals(userOneWithdrawalShares, userTwoWithdrawalShares, userWithdrawalAssets);
+        _requestResolveClaimWithdrawals(userOneWithdrawalShares, userTwoWithdrawalShares);
     }
 
-    function _requestResolveClaimWithdrawals(
-        uint256 userOneWithdrawalShares,
-        uint256 userTwoWithdrawalShares,
-        uint256 userWithdrawalAssets
-    ) internal {
+    function _requestResolveClaimWithdrawals(uint256 userOneWithdrawalShares, uint256 userTwoWithdrawalShares)
+        internal
+    {
         uint256 requestIdOne = _requestWithdrawal(TestConstants.DEPOSITOR, userOneWithdrawalShares);
         uint256 requestIdTwo = _requestWithdrawal(TestConstants.DEPOSITOR_TWO, userTwoWithdrawalShares);
 
@@ -232,8 +231,12 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             "shares locked"
         );
 
-        uint256 requestOneSharesBurned = _resolveWithdrawal(requestIdOne, userWithdrawalAssets);
-        uint256 requestTwoSharesBurned = _resolveWithdrawal(requestIdTwo, userWithdrawalAssets);
+        uint256 requestOneAssets = IVaultFlow(created.vault).previewRedeem(requestOne.amountLocked);
+        uint256 requestOneSharesBurned = _resolveWithdrawal(requestIdOne, requestOneAssets);
+
+        uint256 requestTwoAssets = IVaultFlow(created.vault).previewRedeem(requestTwo.amountLocked);
+        assertLt(requestTwoAssets, requestOneAssets, "different resolved assets");
+        uint256 requestTwoSharesBurned = _resolveWithdrawal(requestIdTwo, requestTwoAssets);
         assertEq(requestOneSharesBurned, userOneWithdrawalShares, "request one shares burned");
         assertEq(requestTwoSharesBurned, userTwoWithdrawalShares, "request two shares burned");
 
@@ -241,17 +244,15 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         requestTwo = request.requests(requestIdTwo);
         assertEq(requestOne.amountLocked, 0, "request one resolved");
         assertEq(requestTwo.amountLocked, 0, "request two resolved");
-        assertEq(IERC20(TestConstants.USDC).balanceOf(requestOne.bag), userWithdrawalAssets, "bag one assets");
-        assertEq(IERC20(TestConstants.USDC).balanceOf(requestTwo.bag), userWithdrawalAssets, "bag two assets");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestOne.bag), requestOneAssets, "bag one assets");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestTwo.bag), requestTwoAssets, "bag two assets");
         assertEq(IERC20(created.vault).balanceOf(created.withdrawalRequest), 0, "shares burned");
 
-        _claimAndBurnRequest(TestConstants.DEPOSITOR, requestIdOne, requestOne.bag, userWithdrawalAssets);
-        _claimAndBurnRequest(TestConstants.DEPOSITOR_TWO, requestIdTwo, requestTwo.bag, userWithdrawalAssets);
+        _claimAndBurnRequest(TestConstants.DEPOSITOR, requestIdOne, requestOne.bag, requestOneAssets);
+        _claimAndBurnRequest(TestConstants.DEPOSITOR_TWO, requestIdTwo, requestTwo.bag, requestTwoAssets);
 
-        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR), userWithdrawalAssets, "user one paid");
-        assertEq(
-            IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR_TWO), userWithdrawalAssets, "user two paid"
-        );
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR), requestOneAssets, "user one paid");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR_TWO), requestTwoAssets, "user two paid");
     }
 
     function test_Verifier_Accepts_Factory_Created_Flex_Vault() public {
