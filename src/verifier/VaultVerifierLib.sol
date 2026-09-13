@@ -203,6 +203,10 @@ library VaultVerifierLib {
         _verifyString(strategy.symbol(), flexParams.strategySymbol, "strategy symbol");
         _verify(_decimals(address(strategy)) == _decimals(vaultParams.baseAsset), "strategy decimals");
         _verify(strategy.asset() == vaultParams.baseAsset, "strategy asset");
+        address[] memory strategyAssets = strategy.getAssets();
+        _verify(strategyAssets.length == 2, "strategy assets length");
+        _verify(strategyAssets[0] == vaultParams.baseAsset, "strategy base asset");
+        _verify(strategyAssets[1] == created.accountingToken, "strategy accounting asset");
         _verify(address(strategy.accountingModule()) == created.accountingModule, "strategy module");
         _verify(address(strategy.hooks()) == created.accountingModuleHook, "strategy hooks");
         _verify(strategy.alwaysComputeTotalAssets() == flexParams.alwaysComputeTotalAssets, "strategy accounting mode");
