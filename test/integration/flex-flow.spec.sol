@@ -20,6 +20,8 @@ interface IVaultFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     function previewWithdraw(uint256 assets) external view returns (uint256 shares);
     function previewRedeem(uint256 shares) external view returns (uint256 assets);
+    function totalAssets() external view returns (uint256 assets);
+    function totalSupply() external view returns (uint256 supply);
     function processor(address[] calldata targets, uint256[] calldata values, bytes[] calldata data)
         external
         returns (bytes[] memory);
@@ -55,6 +57,9 @@ interface IStrategyFlow {
 interface IAccountingModuleFlow {
     function safe() external view returns (address);
     function accountingToken() external view returns (address);
+    function cooldownSeconds() external view returns (uint16);
+    function processRewards(uint256 amount) external;
+    function processLosses(uint256 amount) external;
 }
 
 contract VaultFactoryFlexFlowIntegrationTest is Test {
@@ -210,6 +215,68 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertLe(userTwoWithdrawalShares, userTwoShares, "user two withdrawal shares available");
 
         _requestResolveClaimWithdrawals(userOneWithdrawalShares, userTwoWithdrawalShares);
+    }
+
+    function test_Flex_Deposit_ProcessRewards_Then_ProcessLoss() public {
+        uint256 userDeposit = 1_000_000e6;
+        uint256 rewards = 10_000e6;
+        uint256 loss = 5_000e6;
+
+        _depositToVault(TestConstants.DEPOSITOR, userDeposit);
+        _moveVaultAssetsToFlexStrategy(userDeposit);
+
+        uint256 accountingBalanceAfterDeposit = IERC20(created.accountingToken).balanceOf(created.flexStrategy);
+        uint256 strategyAssetsAfterDeposit = IVaultFlow(created.flexStrategy).totalAssets();
+        uint256 vaultAssetsAfterDeposit = IVaultFlow(created.vault).totalAssets();
+
+        assertEq(accountingBalanceAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "accounting token after deposit");
+        assertEq(strategyAssetsAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "strategy assets after deposit");
+        assertEq(
+            vaultAssetsAfterDeposit,
+            BOOTSTRAP_AMOUNT + strategyAssetsAfterDeposit,
+            "vault assets after deposit"
+        );
+
+        skip(365 days);
+
+        vm.prank(TestConstants.PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processRewards(rewards);
+
+        assertEq(
+            IERC20(created.accountingToken).balanceOf(created.flexStrategy),
+            accountingBalanceAfterDeposit + rewards,
+            "accounting token after rewards"
+        );
+        assertEq(
+            IVaultFlow(created.flexStrategy).totalAssets(),
+            strategyAssetsAfterDeposit + rewards,
+            "strategy assets after rewards"
+        );
+        assertApproxEqAbs(
+            IVaultFlow(created.vault).totalAssets(), vaultAssetsAfterDeposit + rewards, 1, "vault assets after rewards"
+        );
+
+        skip(uint256(IAccountingModuleFlow(created.accountingModule).cooldownSeconds()) + 1);
+
+        vm.prank(TestConstants.LOSS_PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processLosses(loss);
+
+        assertEq(
+            IERC20(created.accountingToken).balanceOf(created.flexStrategy),
+            accountingBalanceAfterDeposit + rewards - loss,
+            "accounting token after loss"
+        );
+        assertEq(
+            IVaultFlow(created.flexStrategy).totalAssets(),
+            strategyAssetsAfterDeposit + rewards - loss,
+            "strategy assets after loss"
+        );
+        assertApproxEqAbs(
+            IVaultFlow(created.vault).totalAssets(),
+            vaultAssetsAfterDeposit + rewards - loss,
+            1,
+            "vault assets after loss"
+        );
     }
 
     function _requestResolveClaimWithdrawals(uint256 userOneWithdrawalShares, uint256 userTwoWithdrawalShares)
@@ -404,6 +471,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             multisig: multisig,
             offRampAddress: TestConstants.OFF_RAMP,
             accountingProcessor: TestConstants.PROCESSOR,
+            lossProcessor: TestConstants.LOSS_PROCESSOR,
             targetApy: 0.05e18,
             lowerBound: 0.01e18,
             minRewardableAssets: 100e6,

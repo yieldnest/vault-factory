@@ -12,6 +12,7 @@ Each vault deployment has these role actors:
 - **OPS multisig:** operational multisig for day-to-day processor and pause operations.
 - **RESOLVER multisig:** withdrawal operations multisig for resolving async withdrawal requests.
 - **Flex strategy multisig:** custody safe used by the FlexStrategy, when a flex strategy is deployed.
+- **Loss processor:** address responsible for processing accounting losses, when a FlexStrategy is deployed.
 
 ## ADMIN
 
@@ -201,11 +202,13 @@ The RESOLVER multisig holds:
 
 ## Flex strategy multisig
 
-When a FlexStrategy is deployed, the flex strategy multisig holds:
+When a FlexStrategy is deployed, the flex strategy multisig is the safe configured in the AccountingModule.
+
+## Loss processor
+
+When a FlexStrategy is deployed, the loss processor holds:
 
 - `LOSS_PROCESSOR_ROLE` on the AccountingModule
-
-The flex strategy multisig is also the safe configured in the AccountingModule.
 
 ## Accounting processor
 
@@ -216,8 +219,6 @@ When a FlexStrategy is deployed, the accounting processor holds:
 When a RewardsSweeper is deployed, the RewardsSweeper also holds `REWARDS_PROCESSOR_ROLE` on the AccountingModule.
 
 ## NEEDS REVIEW
-
-The `LOSS_PROCESSOR_ROLE` assignment needs revision. The current specification assigns it to the flex strategy multisig, but this should be reviewed against the intended loss-processing workflow, signer set, and operational risk model.
 
 The named actors in this document describe responsibilities, not necessarily distinct Safe instances. In practice, OPS, RESOLVER, PROPOSER, PAUSER, and UNPAUSER can be the same multisig or multiple multisigs depending on the deployment's operational workflow.
 

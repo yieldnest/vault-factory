@@ -275,6 +275,7 @@ contract VaultFactoryIntegrationTest is Test {
         flexParams.multisig = address(0x5AFE);
         flexParams.offRampAddress = address(0x0FF);
         flexParams.accountingProcessor = TestConstants.PROCESSOR;
+        flexParams.lossProcessor = TestConstants.LOSS_PROCESSOR;
         flexParams.targetApy = 0.05e18;
         flexParams.lowerBound = 0.01e18;
         flexParams.minRewardableAssets = 100e6;

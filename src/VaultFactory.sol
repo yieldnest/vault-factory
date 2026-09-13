@@ -224,7 +224,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     function _validateFlexParams(FlexStrategyParams calldata flexParams) internal pure {
         if (
             flexParams.multisig == address(0) || flexParams.accountingProcessor == address(0)
-                || flexParams.offRampAddress == address(0)
+                || flexParams.lossProcessor == address(0) || flexParams.offRampAddress == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -386,6 +386,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         }
         cfg.safe = flexParams.multisig;
         cfg.accountingProcessor = flexParams.accountingProcessor;
+        cfg.lossProcessor = flexParams.lossProcessor;
         cfg.targetApy = flexParams.targetApy;
         cfg.lowerBound = flexParams.lowerBound;
         cfg.minRewardableAssets = flexParams.minRewardableAssets;

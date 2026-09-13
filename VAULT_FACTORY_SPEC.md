@@ -211,12 +211,13 @@ When `deployStrategy` is true, the factory deploys the full flex strategy system
 - **RewardsSweeper** — optional, controlled by the `deployRewardsSweeper` flag. When deployed it is wired to the accounting module and granted `REWARDS_PROCESSOR_ROLE` on it; its implementation is only read from the registry when the flag is set.
 - **FixedRateProvider** — the strategy's rate provider, pricing the base asset and accounting token at par.
 
-Role assignment mirrors the Main Vault policy: every critical role (`DEFAULT_ADMIN_ROLE` and all manager roles, `SAFE_MANAGER_ROLE`) goes to the deployment timelock; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `PAUSER_ROLE` and `UNPAUSER_ROLE` also go to `admin`; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to the multisig. All temporary factory roles are renounced.
+Role assignment mirrors the Main Vault policy: every critical role (`DEFAULT_ADMIN_ROLE` and all manager roles, `SAFE_MANAGER_ROLE`) goes to the deployment timelock; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `PAUSER_ROLE` and `UNPAUSER_ROLE` also go to `admin`; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to `lossProcessor`. All temporary factory roles are renounced.
 
 #### Parameters
 
-- **multisig:** the custody safe; receives strategy funds via the accounting module and holds `LOSS_PROCESSOR_ROLE`.
+- **multisig:** the custody safe; receives strategy funds via the accounting module.
 - **accountingProcessor:** granted `REWARDS_PROCESSOR_ROLE` on the accounting module.
+- **lossProcessor:** granted `LOSS_PROCESSOR_ROLE` on the accounting module.
 - **targetApy / lowerBound / minRewardableAssets:** accounting module configuration.
 - **strategyName / strategySymbol / accountingTokenName / accountingTokenSymbol:** token metadata.
 - **offRampAddress:**  

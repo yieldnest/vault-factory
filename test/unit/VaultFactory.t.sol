@@ -1182,7 +1182,7 @@ contract VaultFactoryTest is Test {
         assertTrue(accountingModule.hasRole(accountingModule.SAFE_MANAGER_ROLE(), created.timelock));
         assertTrue(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), address(0xACC0)));
         assertTrue(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), created.rewardsSweeper));
-        assertTrue(accountingModule.hasRole(accountingModule.LOSS_PROCESSOR_ROLE(), address(0x5AFE)));
+        assertTrue(accountingModule.hasRole(accountingModule.LOSS_PROCESSOR_ROLE(), address(0x1055)));
         assertFalse(accountingModule.hasRole(accountingModule.DEFAULT_ADMIN_ROLE(), address(factory)));
 
         // Rewards sweeper wiring.
@@ -1337,6 +1337,17 @@ contract VaultFactoryTest is Test {
         vm.stopPrank();
     }
 
+    function testCreateVaultFlexStrategyRequiresLossProcessor() public {
+        IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
+        flexParams.lossProcessor = address(0);
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        vm.expectRevert(IVaultFactory.ZeroAddress.selector);
+        factory.createVault(_vaultParams(1 ether), flexParams);
+        vm.stopPrank();
+    }
+
     function testCreateVaultFlexStrategyRequiresOffRampAddress() public {
         IVaultFactory.FlexStrategyParams memory flexParams = _flexParams();
         flexParams.offRampAddress = address(0);
@@ -1459,6 +1470,7 @@ contract VaultFactoryTest is Test {
             multisig: address(0x5AFE),
             offRampAddress: address(0x0FF),
             accountingProcessor: address(0xACC0),
+            lossProcessor: address(0x1055),
             targetApy: 0.05e18,
             lowerBound: 0.01e18,
             minRewardableAssets: 100e6,

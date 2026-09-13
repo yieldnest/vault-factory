@@ -62,6 +62,7 @@ library FlexStrategyDeployer {
         // flex parameters
         address safe;
         address accountingProcessor;
+        address lossProcessor;
         uint256 targetApy;
         uint256 lowerBound;
         uint256 minRewardableAssets;
@@ -227,7 +228,7 @@ library FlexStrategyDeployer {
         accountingModule.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
         accountingModule.grantRole(SAFE_MANAGER_ROLE, cfg.timelock);
         accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, cfg.accountingProcessor);
-        accountingModule.grantRole(LOSS_PROCESSOR_ROLE, cfg.safe);
+        accountingModule.grantRole(LOSS_PROCESSOR_ROLE, cfg.lossProcessor);
 
         if (sys.rewardsSweeper != address(0)) {
             accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, sys.rewardsSweeper);

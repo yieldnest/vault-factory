@@ -250,7 +250,7 @@ library VaultVerifierLib {
             true,
             "accounting rewards processor"
         );
-        _verifyRole(accountingModule, LOSS_PROCESSOR_ROLE, flexParams.multisig, true, "accounting loss processor");
+        _verifyRole(accountingModule, LOSS_PROCESSOR_ROLE, flexParams.lossProcessor, true, "accounting loss processor");
         _verifyRole(
             accountingModule, DEFAULT_ADMIN_ROLE, verification.factory, false, "accounting module dangling admin"
         );

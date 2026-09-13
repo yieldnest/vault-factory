@@ -99,6 +99,7 @@ contract VerifyVault is Script {
             multisig: CONTROLLER,
             offRampAddress: OFF_RAMP,
             accountingProcessor: CONTROLLER,
+            lossProcessor: CONTROLLER,
             targetApy: TARGET_APY,
             lowerBound: LOWER_BOUND,
             minRewardableAssets: MIN_REWARDABLE_ASSETS,

@@ -150,6 +150,7 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
             multisig: TestConstants.SAFE_OWNER,
             offRampAddress: TestConstants.OFF_RAMP,
             accountingProcessor: TestConstants.PROCESSOR,
+            lossProcessor: TestConstants.LOSS_PROCESSOR,
             targetApy: 0.05e18,
             lowerBound: 0.01e18,
             minRewardableAssets: 100e6,

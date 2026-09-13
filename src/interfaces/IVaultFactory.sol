@@ -29,6 +29,7 @@ interface IVaultFactory {
         address multisig;
         address offRampAddress;
         address accountingProcessor;
+        address lossProcessor;
         uint256 targetApy;
         uint256 lowerBound;
         uint256 minRewardableAssets;
