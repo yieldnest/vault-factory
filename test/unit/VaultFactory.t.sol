@@ -984,7 +984,8 @@ contract VaultFactoryTest is Test {
         assertEq(MockVault(created.vault).processAccountingCalls(), 1);
         MockFlexStrategy strategy = MockFlexStrategy(created.flexStrategy);
         assertEq(strategy.processAccountingCalls(), 0);
-        assertEq(strategy.shareBalance(created.vault), 1e6);
+        assertEq(strategy.shareBalance(created.vault), 0);
+        assertEq(strategy.shareBalance(bootstrapReceiver), 1e6);
     }
 
     function testCreateVaultProcessesStrategyAccountingWhenFlexCachedAccountingEnabled() public {
@@ -1005,7 +1006,8 @@ contract VaultFactoryTest is Test {
         assertEq(MockVault(created.vault).processAccountingCalls(), 0);
         MockFlexStrategy strategy = MockFlexStrategy(created.flexStrategy);
         assertEq(strategy.processAccountingCalls(), 1);
-        assertEq(strategy.shareBalance(created.vault), 1e6);
+        assertEq(strategy.shareBalance(created.vault), 0);
+        assertEq(strategy.shareBalance(bootstrapReceiver), 1e6);
     }
 
     function testCreateVaultBootstrapsWithNoReturnDataToken() public {
@@ -1197,7 +1199,8 @@ contract VaultFactoryTest is Test {
         assertEq(vault.shareBalance(bootstrapReceiver), 1e18);
         assertEq(usdc.balanceOf(created.vault), 1e6);
         assertEq(usdc.balanceOf(created.flexStrategy), 1e6);
-        assertEq(strategy.shareBalance(created.vault), 1e6);
+        assertEq(strategy.shareBalance(created.vault), 0);
+        assertEq(strategy.shareBalance(bootstrapReceiver), 1e6);
 
         // All strategy-system proxies share the vault timelock as proxy admin owner.
         address strategyProxyAdmin = address(uint160(uint256(vm.load(created.flexStrategy, ERC1967_ADMIN_SLOT))));
@@ -1269,7 +1272,8 @@ contract VaultFactoryTest is Test {
         assertEq(created.vault, started.vault);
         assertFalse(vault.paused());
         assertEq(vault.shareBalance(bootstrapReceiver), 1 ether);
-        assertEq(strategy.shareBalance(created.vault), 1e6);
+        assertEq(strategy.shareBalance(created.vault), 0);
+        assertEq(strategy.shareBalance(bootstrapReceiver), 1e6);
         assertFalse(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertFalse(vault.hasRole(vault.ASSET_MANAGER_ROLE(), address(factory)));
         assertFalse(strategy.hasRole(strategy.ALLOCATOR_ROLE(), address(factory)));

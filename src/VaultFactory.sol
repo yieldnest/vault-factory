@@ -184,7 +184,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
 
         _bootstrap(vault, params);
         if (flexParams.deployStrategy) {
-            _bootstrapStrategy(created.flexStrategy, created.vault, params);
+            _bootstrapStrategy(created.flexStrategy, params);
         }
 
         // Refresh cached accounting after direct bootstrap mints. The main vault prices strategy
@@ -396,15 +396,17 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         cfg.accountingTokenSymbol = flexParams.accountingTokenSymbol;
     }
 
-    /// @dev Deposits one bootstrap amount of the base asset into the strategy with the vault as
-    /// the receiver of the strategy shares, then renounces the factory's ALLOCATOR_ROLE. Runs
+    /// @dev Deposits one bootstrap amount of the base asset into the strategy with the bootstrap
+    /// receiver as the receiver of the strategy shares, then renounces the factory's
+    /// ALLOCATOR_ROLE. The shares must not go to the vault: assets received by the vault without
+    /// a matching share mint are a donation that inflates the genesis share rate above par. Runs
     /// after the vault bootstrap so the strategy shares cannot dilute the vault's first mint.
-    function _bootstrapStrategy(address strategy, address vault, VaultParams memory params) internal {
+    function _bootstrapStrategy(address strategy, VaultParams memory params) internal {
         IERC20 asset = IERC20(params.baseAsset);
 
         asset.safeTransferFrom(msg.sender, address(this), params.bootstrapAmount);
         asset.forceApprove(strategy, params.bootstrapAmount);
-        uint256 shares = IFlexStrategy(strategy).deposit(params.bootstrapAmount, vault);
+        uint256 shares = IFlexStrategy(strategy).deposit(params.bootstrapAmount, params.bootstrapReceiver);
 
         // Same prefund protection as the vault bootstrap: the strategy is empty and its fixed
         // rate provider prices the base asset at par, so the first mint must be exactly 1:1 in

@@ -138,7 +138,12 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             BOOTSTRAP_AMOUNT + depositAmount,
             "accounting token minted to strategy"
         );
-        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), BOOTSTRAP_AMOUNT + depositAmount, "shares");
+        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), depositAmount, "vault strategy shares");
+        assertEq(
+            IERC20(created.flexStrategy).balanceOf(TestConstants.BOOTSTRAP_RECEIVER),
+            BOOTSTRAP_AMOUNT,
+            "bootstrap receiver strategy shares"
+        );
 
         SafeTestLib.execSingleOwnerSafeTransaction(
             safe,

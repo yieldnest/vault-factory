@@ -250,4 +250,6 @@ The factory create call transfers the asset or assets away from the users.
 
 The factory enforces a minimum bootstrap amount of one unit of the default asset (10^decimals) and reverts below it.
 
-With a flex strategy, the factory pulls the bootstrap amount twice: once for the Main Vault deposit and once for the strategy deposit. The strategy bootstrap runs after the vault bootstrap (so it cannot dilute the vault's first mint), deposits into the strategy with the Main Vault as the receiver of the strategy shares, asserts the exact expected first mint, and then renounces the factory's `ALLOCATOR_ROLE`.
+With a flex strategy, the factory pulls the bootstrap amount twice: once for the Main Vault deposit and once for the strategy deposit. The strategy bootstrap runs after the vault bootstrap (so it cannot dilute the vault's first mint), deposits into the strategy with the **bootstrap receiver** as the receiver of the strategy shares, asserts the exact expected first mint, and then renounces the factory's `ALLOCATOR_ROLE`.
+
+The strategy bootstrap shares must NOT go to the Main Vault: assets the vault receives without a matching share mint are a donation that inflates the genesis share rate above par (one bootstrap unit donated onto a one-unit seed doubles the rate). The Main Vault starts at a share rate of exactly 1.
