@@ -167,11 +167,9 @@ The registry keys used by the factory are fixed constants compiled into the fact
 
 ### Hooks
 
-Hook deployment is out of scope for this factory revision.
+The Main Vault does not deploy or attach hooks currently.
 
-The factory still assigns the Main Vault hook manager role to the deployment timelock, so future hook installation or hook replacement remains a critical timelocked operation.
-
-When hook deployment is added back, it should use the actual periphery contracts and APIs rather than inferred factory interfaces.
+When the optional flex strategy is deployed, the factory deploys an `AccountingModuleHook` for the FlexStrategy and attaches it to the FlexStrategy.
 
 ### Async withdrawals
 
