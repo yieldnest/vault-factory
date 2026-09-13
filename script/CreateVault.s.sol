@@ -27,14 +27,10 @@ contract CreateVault is Script {
 
     function run() external returns (IVaultFactory.CreatedVault memory created) {
         address factory = vm.promptAddress("VaultFactory address");
-        address proposer = vm.envOr("TIMELOCK_PROPOSER", address(0));
-        if (proposer == address(0)) {
-            proposer = vm.promptAddress("Timelock proposer");
-        }
 
         IVaultFactory.VaultParams memory params = IVaultFactory.VaultParams({
             admin: CONTROLLER,
-            proposer: proposer,
+            proposer: CONTROLLER,
             processor: CONTROLLER,
             pauser: CONTROLLER,
             unpauser: CONTROLLER,
