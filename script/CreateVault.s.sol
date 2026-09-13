@@ -16,7 +16,7 @@ contract CreateVault is Script {
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant OFF_RAMP = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
 
-    uint256 internal constant TIMELOCK_DURATION = 30 seconds;
+    uint256 internal constant TIMELOCK_DURATION = 15 seconds;
     // 0.1 USDC expressed in 18-decimal vault shares, the unit the request policy locks.
     uint256 internal constant MIN_WITHDRAWAL_AMOUNT = 0.1 ether;
     uint256 internal constant MAX_DATA_LENGTH = 256;
