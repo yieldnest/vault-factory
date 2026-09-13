@@ -106,19 +106,22 @@ library VaultVerifierLib {
         _verify(!vault.paused(), "vault paused");
 
         address[] memory assets = vault.getAssets();
+        uint256 expectedAssets = baseAssetDecimals == VAULT_DECIMALS ? 1 : 2;
+        if (verification.flexParams.deployStrategy) {
+            expectedAssets += 1;
+        }
+        _verify(assets.length == expectedAssets, "vault assets length");
+
         if (baseAssetDecimals == VAULT_DECIMALS) {
-            _verify(assets.length == 1, "vault assets length");
             _verify(assets[0] == params.baseAsset, "vault base asset");
             _verify(created.wrappedToken == address(0), "unexpected wrapper");
         } else {
-            _verify(assets.length >= 2, "vault wrapped assets length");
             _verify(assets[0] == effectiveBaseAsset, "vault wrapper asset");
             _verify(assets[1] == params.baseAsset, "vault default asset");
             _verifyWrappedToken(created.wrappedToken, params.baseAsset, baseAssetDecimals);
         }
 
         if (verification.flexParams.deployStrategy) {
-            _verify(assets.length == (baseAssetDecimals == VAULT_DECIMALS ? 2 : 3), "vault flex assets length");
             _verify(assets[assets.length - 1] == created.flexStrategy, "vault strategy asset");
             _verifyVaultStrategyRules(vault, params.baseAsset, created.flexStrategy, vaultAddress);
         }
