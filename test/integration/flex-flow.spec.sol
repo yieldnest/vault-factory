@@ -18,6 +18,8 @@ import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/inte
 
 interface IVaultFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
+    function convertToShares(uint256 assets) external view returns (uint256 shares);
     function previewWithdraw(uint256 assets) external view returns (uint256 shares);
     function previewRedeem(uint256 shares) external view returns (uint256 assets);
     function totalAssets() external view returns (uint256 assets);
@@ -86,6 +88,23 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
         created = factory.createVault(_vaultParams(), _flexParams(address(safe)));
         vm.stopPrank();
+    }
+
+    function test_Flex_Bootstrap_Conversion_Rates() public view {
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), BOOTSTRAP_AMOUNT, "vault convert assets");
+        assertEq(IVaultFlow(created.vault).convertToShares(BOOTSTRAP_AMOUNT), 1e18, "vault convert shares");
+        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), 0, "vault has no strategy shares");
+
+        assertEq(
+            IVaultFlow(created.flexStrategy).convertToAssets(BOOTSTRAP_AMOUNT),
+            BOOTSTRAP_AMOUNT,
+            "strategy convert assets"
+        );
+        assertEq(
+            IVaultFlow(created.flexStrategy).convertToShares(BOOTSTRAP_AMOUNT),
+            BOOTSTRAP_AMOUNT,
+            "strategy convert shares"
+        );
     }
 
     function testFuzz_Flex_Deposit_Processor_Move_And_Guarded_OffRamp(uint256 depositAmount) public {
@@ -232,13 +251,15 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
 
         uint256 accountingBalanceAfterDeposit = IERC20(created.accountingToken).balanceOf(created.flexStrategy);
         uint256 strategyAssetsAfterDeposit = IVaultFlow(created.flexStrategy).totalAssets();
+        uint256 vaultStrategyShares = IERC20(created.flexStrategy).balanceOf(created.vault);
         uint256 vaultAssetsAfterDeposit = IVaultFlow(created.vault).totalAssets();
 
         assertEq(accountingBalanceAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "accounting token after deposit");
         assertEq(strategyAssetsAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "strategy assets after deposit");
         assertEq(
             vaultAssetsAfterDeposit,
-            BOOTSTRAP_AMOUNT + strategyAssetsAfterDeposit,
+            IERC20(TestConstants.USDC).balanceOf(created.vault)
+                + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares),
             "vault assets after deposit"
         );
 
@@ -257,8 +278,13 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             strategyAssetsAfterDeposit + rewards,
             "strategy assets after rewards"
         );
+        uint256 expectedVaultAssetsAfterRewards = IERC20(TestConstants.USDC).balanceOf(created.vault)
+            + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
         assertApproxEqAbs(
-            IVaultFlow(created.vault).totalAssets(), vaultAssetsAfterDeposit + rewards, 1, "vault assets after rewards"
+            IVaultFlow(created.vault).totalAssets(),
+            expectedVaultAssetsAfterRewards,
+            1,
+            "vault assets after rewards"
         );
 
         skip(uint256(IAccountingModuleFlow(created.accountingModule).cooldownSeconds()) + 1);
@@ -276,9 +302,11 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             strategyAssetsAfterDeposit + rewards - loss,
             "strategy assets after loss"
         );
+        uint256 expectedVaultAssetsAfterLoss = IERC20(TestConstants.USDC).balanceOf(created.vault)
+            + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
         assertApproxEqAbs(
             IVaultFlow(created.vault).totalAssets(),
-            vaultAssetsAfterDeposit + rewards - loss,
+            expectedVaultAssetsAfterLoss,
             1,
             "vault assets after loss"
         );
