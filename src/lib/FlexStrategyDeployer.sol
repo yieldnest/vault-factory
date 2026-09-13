@@ -49,6 +49,7 @@ library FlexStrategyDeployer {
         uint8 baseAssetDecimals;
         bool alwaysComputeTotalAssets;
         bool deployRewardsSweeper;
+        uint256 providerRate;
         address processor;
         address pauser;
         address unpauser;
@@ -166,7 +167,8 @@ library FlexStrategyDeployer {
             IRewardsSweeper(sys.rewardsSweeper).initialize(address(this), address(this), sys.accountingModule);
         }
 
-        sys.vaultProvider = address(new FlexProvider(cfg.effectiveBaseAsset, cfg.baseAsset, sys.strategy));
+        sys.vaultProvider =
+            address(new FlexProvider(cfg.effectiveBaseAsset, cfg.baseAsset, sys.strategy, cfg.providerRate));
     }
 
     function _configureStrategy(Config memory cfg, FlexSystem memory sys) internal {

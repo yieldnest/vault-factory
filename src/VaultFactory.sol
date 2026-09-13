@@ -374,6 +374,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         cfg.baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
         cfg.alwaysComputeTotalAssets = flexParams.alwaysComputeTotalAssets;
         cfg.deployRewardsSweeper = flexParams.deployRewardsSweeper;
+        cfg.providerRate = PROVIDER_RATE;
         cfg.processor = params.processor;
         cfg.pauser = params.pauser;
         cfg.unpauser = params.unpauser;

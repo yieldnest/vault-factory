@@ -1098,6 +1098,7 @@ contract VaultFactoryTest is Test {
         assertEq(provider.baseAsset(), created.wrappedToken);
         assertEq(provider.defaultAsset(), address(usdc));
         assertEq(provider.strategy(), created.flexStrategy);
+        assertEq(provider.parRate(), 1e18);
         assertEq(provider.getRate(created.wrappedToken), 1e18);
         assertEq(provider.getRate(address(usdc)), 1e18);
         assertEq(provider.getRate(created.flexStrategy), 1e18);

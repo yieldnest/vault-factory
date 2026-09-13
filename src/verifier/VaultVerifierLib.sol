@@ -140,6 +140,7 @@ library VaultVerifierLib {
             _verify(provider.baseAsset() == effectiveBaseAsset, "flex provider base");
             _verify(provider.defaultAsset() == params.baseAsset, "flex provider default");
             _verify(provider.strategy() == created.flexStrategy, "flex provider strategy");
+            _verify(provider.parRate() == PROVIDER_RATE, "flex provider par rate");
             _verify(provider.getRate(effectiveBaseAsset) == PROVIDER_RATE, "flex provider base rate");
             _verify(provider.getRate(params.baseAsset) == PROVIDER_RATE, "flex provider default rate");
         } else {
