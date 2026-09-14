@@ -41,6 +41,10 @@ interface IAccountingModuleHooksFlow {
     function processRewards(uint256 amount) external;
 }
 
+interface IHookName {
+    function name() external view returns (string memory);
+}
+
 contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
     uint256 private constant BOOTSTRAP_AMOUNT = 1e6;
     uint256 private constant PERFORMANCE_FEE = 0.1e18;
@@ -62,10 +66,14 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
     }
 
     function test_Hooks_Are_Instantiated_And_Ordered() public view {
-        assertGt(created.metaHooks.code.length, 0, "meta hooks code");
-        assertGt(created.pauserHook.code.length, 0, "pauser hook code");
-        assertGt(created.feeHook.code.length, 0, "fee hook code");
-        assertGt(created.processAccountingGuardHook.code.length, 0, "guard hook code");
+        assertEq(IHookName(created.metaHooks).name(), "MetaHooks", "meta hooks name");
+        assertEq(IHookName(created.pauserHook).name(), "PauserHook", "pauser hook name");
+        assertEq(IHookName(created.feeHook).name(), "PerformanceFeeHooks", "fee hook name");
+        assertEq(
+            IHookName(created.processAccountingGuardHook).name(),
+            "ProcessAccountingGuardHook",
+            "guard hook name"
+        );
         assertEq(IVaultHooksFlow(created.vault).hooks(), created.metaHooks, "vault hooks");
 
         IMetaHooksFlow metaHooks = IMetaHooksFlow(created.metaHooks);
