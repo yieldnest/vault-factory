@@ -151,13 +151,14 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         uint256 vaultStrategyAssetsAdded = IVaultHooksFlow(created.flexStrategy).convertToAssets(
             beforeAccounting.vaultStrategyShares
         ) - beforeAccounting.vaultStrategyAssets;
-        uint256 yieldBaseAssets = totalAssetsAfter - beforeAccounting.totalAssets;
-        uint256 feeBaseAssets = yieldBaseAssets * PERFORMANCE_FEE / 1e18;
+        uint256 mainVaultAssetsAdded = totalAssetsAfter - beforeAccounting.totalAssets;
+        uint256 feeBaseAssets = mainVaultAssetsAdded * PERFORMANCE_FEE / 1e18;
         uint256 expectedFeeShares = feeBaseAssets * beforeAccounting.totalSupply / (totalAssetsAfter - feeBaseAssets);
 
         assertEq(strategyAssetsAdded, rewards, "strategy assets added");
-        assertEq(yieldBaseAssets, vaultStrategyAssetsAdded, "vault assets added");
-        assertLt(yieldBaseAssets, rewards, "vault assets added excludes bootstrap holder rewards");
+        assertEq(mainVaultAssetsAdded, vaultStrategyAssetsAdded, "main vault assets added");
+        assertEq(totalAssetsAfter, beforeAccounting.totalAssets + mainVaultAssetsAdded, "main vault total assets");
+        assertLt(mainVaultAssetsAdded, rewards, "vault assets added excludes bootstrap holder rewards");
         assertGt(expectedFeeShares, 0, "expected fee shares");
         assertEq(
             IERC20(created.vault).balanceOf(beforeAccounting.feeRecipient) - beforeAccounting.feeRecipientShares,
