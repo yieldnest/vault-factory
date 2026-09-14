@@ -26,13 +26,13 @@ contract CreateVault is Script {
     uint256 internal constant LOWER_BOUND = 0.01e18;
     uint256 internal constant MIN_REWARDABLE_ASSETS = 100e6;
     bool internal constant DEPLOY_PAUSER_HOOK = false;
-    bool internal constant DEPLOY_FEE_HOOK = false;
-    bool internal constant DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK = false;
-    uint256 internal constant PERFORMANCE_FEE = 0;
-    uint256 internal constant MAX_TOTAL_ASSETS_DECREASE_RATIO = 0;
-    uint256 internal constant MAX_TOTAL_ASSETS_INCREASE_RATIO = 0;
-    uint256 internal constant MAX_TOTAL_SUPPLY_INCREASE_RATIO = 0;
-    uint256 internal constant EXPECTED_PERFORMANCE_FEE = 0;
+    bool internal constant DEPLOY_FEE_HOOK = true;
+    bool internal constant DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK = true;
+    uint256 internal constant PERFORMANCE_FEE = 0.1e18;
+    uint256 internal constant MAX_TOTAL_ASSETS_DECREASE_RATIO = 0.005e18;
+    uint256 internal constant MAX_TOTAL_ASSETS_INCREASE_RATIO = 0.005e18;
+    uint256 internal constant MAX_TOTAL_SUPPLY_INCREASE_RATIO = 0.005e18;
+    uint256 internal constant EXPECTED_PERFORMANCE_FEE = PERFORMANCE_FEE;
 
     function run() external returns (IVaultFactory.CreatedVault memory created) {
         address factory = vm.promptAddress("VaultFactory address");
@@ -48,7 +48,7 @@ contract CreateVault is Script {
             tokenName: "Whitelabel USDC RWA",
             tokenSymbol: "WLRWA",
             countNativeAsset: false,
-            alwaysComputeTotalAssets: true,
+            alwaysComputeTotalAssets: false,
             timelockDuration: TIMELOCK_DURATION,
             minWithdrawalAmount: MIN_WITHDRAWAL_AMOUNT,
             maxDataLength: MAX_DATA_LENGTH,
