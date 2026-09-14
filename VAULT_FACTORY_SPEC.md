@@ -96,9 +96,6 @@ These are the key parameters that are used when deploying a new RWA vault via th
 
 The `admin` address is also granted the deployed systems' pause authority as a supervisory incident-control path. On the Main Vault and FlexStrategy this means `PAUSER_ROLE` and `UNPAUSER_ROLE`; on the WithdrawalRequest this means `PAUSER_ROLE`, which covers both pause and unpause behavior.
 
-- **feeManager:**  
-  The address responsible for managing and collecting any fees associated with the vault.
-
 - **tokenName:**  
   The display name of the vault’s share token.
 
@@ -131,6 +128,7 @@ The same timelock is also assigned wherever the deployment has critical protocol
 - provider changes
 - asset changes
 - buffer changes
+- fee changes
 - processor rule changes
 - allocator manager operations
 - hook manager operations

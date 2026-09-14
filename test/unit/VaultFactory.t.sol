@@ -736,7 +736,6 @@ contract VaultFactoryTest is Test {
     address private processor = address(0xBEEF);
     address private pauser = address(0xCAFE);
     address private unpauser = address(0xD00D);
-    address private feeManager = address(0xFEE);
     address private resolver = address(0x2E50);
     address private bootstrapReceiver = address(0xB007);
     address private creator = address(0xC0DEC);
@@ -838,7 +837,7 @@ contract VaultFactoryTest is Test {
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), unpauser));
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), admin));
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), admin));
-        assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), feeManager));
+        assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), created.timelock));
         assertTrue(vault.hasRole(vault.PROVIDER_MANAGER_ROLE(), created.timelock));
         assertTrue(vault.hasRole(vault.BUFFER_MANAGER_ROLE(), created.timelock));
         assertTrue(vault.hasRole(vault.ASSET_MANAGER_ROLE(), created.timelock));
@@ -1445,7 +1444,6 @@ contract VaultFactoryTest is Test {
             processor: processor,
             pauser: pauser,
             unpauser: unpauser,
-            feeManager: feeManager,
             resolver: resolver,
             baseAsset: address(asset),
             tokenName: "RWA Vault",

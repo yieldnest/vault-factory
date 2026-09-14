@@ -8,7 +8,6 @@ interface IVaultFactory {
         address processor;
         address pauser;
         address unpauser;
-        address feeManager;
         address resolver;
         address baseAsset;
         string tokenName;

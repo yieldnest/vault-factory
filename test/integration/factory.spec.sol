@@ -228,7 +228,7 @@ contract VaultFactoryIntegrationTest is Test {
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), TestConstants.UNPAUSER), "unpauser");
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), TestConstants.ADMIN), "admin pauser");
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), TestConstants.ADMIN), "admin unpauser");
-        assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), TestConstants.FEE_MANAGER), "fee manager");
+        assertTrue(vault.hasRole(vault.FEE_MANAGER_ROLE(), created.timelock), "timelock fee manager");
         assertTrue(vault.hasRole(vault.PROVIDER_MANAGER_ROLE(), created.timelock), "provider manager");
         assertTrue(vault.hasRole(vault.BUFFER_MANAGER_ROLE(), created.timelock), "buffer manager");
         assertTrue(vault.hasRole(vault.ASSET_MANAGER_ROLE(), created.timelock), "asset manager");
@@ -331,7 +331,6 @@ contract VaultFactoryIntegrationTest is Test {
             processor: TestConstants.PROCESSOR,
             pauser: TestConstants.PAUSER,
             unpauser: TestConstants.UNPAUSER,
-            feeManager: TestConstants.FEE_MANAGER,
             resolver: TestConstants.RESOLVER,
             baseAsset: TestConstants.USDC,
             tokenName: "Whitelabel USDC RWA",

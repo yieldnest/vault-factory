@@ -338,7 +338,7 @@ library VaultVerifierLib {
         _verifyRole(vault, UNPAUSER_ROLE, params.unpauser, true, "vault unpauser role");
         _verifyRole(vault, PAUSER_ROLE, params.admin, true, "vault admin pauser role");
         _verifyRole(vault, UNPAUSER_ROLE, params.admin, true, "vault admin unpauser role");
-        _verifyRole(vault, FEE_MANAGER_ROLE, params.feeManager, true, "vault fee role");
+        _verifyRole(vault, FEE_MANAGER_ROLE, created.timelock, true, "vault fee role");
         _verifyRole(vault, PROVIDER_MANAGER_ROLE, created.timelock, true, "vault provider role");
         _verifyRole(vault, BUFFER_MANAGER_ROLE, created.timelock, true, "vault buffer role");
         _verifyRole(vault, ASSET_MANAGER_ROLE, created.timelock, true, "vault asset role");

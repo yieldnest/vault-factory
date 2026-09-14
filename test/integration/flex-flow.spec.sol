@@ -481,7 +481,6 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             processor: TestConstants.PROCESSOR,
             pauser: TestConstants.PAUSER,
             unpauser: TestConstants.UNPAUSER,
-            feeManager: TestConstants.FEE_MANAGER,
             resolver: TestConstants.RESOLVER,
             baseAsset: TestConstants.USDC,
             tokenName: "Whitelabel Flex USDC",

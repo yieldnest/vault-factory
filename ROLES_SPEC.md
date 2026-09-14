@@ -95,6 +95,7 @@ The timelock holds:
 - `BUFFER_MANAGER_ROLE`
 - `PROCESSOR_MANAGER_ROLE`
 - `HOOKS_MANAGER_ROLE`
+- `FEE_MANAGER_ROLE`
 
 The timelock does not hold the operational roles on the Main Vault.
 

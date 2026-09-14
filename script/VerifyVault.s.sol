@@ -76,7 +76,6 @@ contract VerifyVault is Script {
             processor: CONTROLLER,
             pauser: CONTROLLER,
             unpauser: CONTROLLER,
-            feeManager: CONTROLLER,
             resolver: CONTROLLER,
             baseAsset: USDC,
             tokenName: "Whitelabel USDC RWA",

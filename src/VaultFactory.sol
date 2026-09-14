@@ -206,9 +206,8 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     function _validateVaultParams(VaultParams calldata params) internal view {
         if (
             params.admin == address(0) || params.proposer == address(0) || params.processor == address(0)
-                || params.pauser == address(0) || params.unpauser == address(0) || params.feeManager == address(0)
-                || params.resolver == address(0) || params.baseAsset == address(0)
-                || params.bootstrapReceiver == address(0)
+                || params.pauser == address(0) || params.unpauser == address(0) || params.resolver == address(0)
+                || params.baseAsset == address(0) || params.bootstrapReceiver == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -294,7 +293,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         vault.grantRole(UNPAUSER_ROLE, params.unpauser);
         vault.grantRole(PAUSER_ROLE, params.admin);
         vault.grantRole(UNPAUSER_ROLE, params.admin);
-        vault.grantRole(FEE_MANAGER_ROLE, params.feeManager);
+        vault.grantRole(FEE_MANAGER_ROLE, timelock);
 
         vault.grantRole(PROVIDER_MANAGER_ROLE, timelock);
         vault.grantRole(BUFFER_MANAGER_ROLE, timelock);
