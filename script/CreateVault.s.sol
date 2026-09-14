@@ -25,7 +25,7 @@ contract CreateVault is Script {
     uint256 internal constant TARGET_APY = 0.05e18;
     uint256 internal constant LOWER_BOUND = 0.01e18;
     uint256 internal constant MIN_REWARDABLE_ASSETS = 100e6;
-    bool internal constant DEPLOY_PAUSER_HOOK = false;
+    bool internal constant DEPLOY_PAUSER_HOOK = true;
     bool internal constant DEPLOY_FEE_HOOK = true;
     bool internal constant DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK = true;
     uint256 internal constant PERFORMANCE_FEE = 0.1e18;
