@@ -49,7 +49,7 @@ library HooksVerifierLib {
             _verify(address(metaHooks.hooks(index++)) == created.pauserHook, "pauser hook order");
             IPauserHookView pauserHook = IPauserHookView(created.pauserHook);
             _verify(created.pauserHook.code.length != 0, "pauser hook code");
-            _verify(pauserHook.VAULT() == created.vault, "pauser hook vault");
+            _verify(pauserHook.VAULT() == created.metaHooks, "pauser hook vault");
             _verifyRole(pauserHook, DEFAULT_ADMIN_ROLE, created.timelock, true, "pauser hook admin");
             _verifyRole(pauserHook, PAUSER_ROLE, vaultParams.pauser, true, "pauser hook pauser");
             _verifyRole(pauserHook, UNPAUSER_ROLE, vaultParams.unpauser, true, "pauser hook unpauser");
@@ -61,7 +61,7 @@ library HooksVerifierLib {
             _verify(address(metaHooks.hooks(index++)) == created.feeHook, "fee hook order");
             IFeeHookView feeHook = IFeeHookView(created.feeHook);
             _verify(created.feeHook.code.length != 0, "fee hook code");
-            _verify(feeHook.VAULT() == created.vault, "fee hook vault");
+            _verify(feeHook.VAULT() == created.metaHooks, "fee hook vault");
             _verify(feeHook.owner() == created.timelock, "fee hook owner");
             _verify(feeHook.performanceFee() == config.feeHook.performanceFee, "fee hook performance fee");
             _verify(feeHook.performanceFeeRecipient() == created.timelock, "fee hook recipient");
@@ -74,7 +74,7 @@ library HooksVerifierLib {
             _verify(address(metaHooks.hooks(index++)) == created.processAccountingGuardHook, "guard hook order");
             IProcessAccountingGuardHookView guard = IProcessAccountingGuardHookView(created.processAccountingGuardHook);
             _verify(created.processAccountingGuardHook.code.length != 0, "guard hook code");
-            _verify(guard.VAULT() == created.vault, "guard hook vault");
+            _verify(guard.VAULT() == created.metaHooks, "guard hook vault");
             _verify(guard.owner() == created.timelock, "guard hook owner");
             _verify(
                 guard.maxTotalAssetsDecreaseRatio() == config.processAccountingGuardHook.maxTotalAssetsDecreaseRatio,

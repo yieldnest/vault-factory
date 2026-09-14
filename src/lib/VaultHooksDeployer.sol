@@ -29,33 +29,34 @@ library VaultHooksDeployer {
         uint256 hookCount = _hookCount(config);
         if (hookCount == 0) return deployed;
 
+        MetaHooks metaHooks = new MetaHooks(vault, address(this), address(this));
+        deployed.metaHooks = address(metaHooks);
+
         IHooks[] memory hooks = new IHooks[](hookCount);
         uint256 index;
 
         if (config.deployPauserHook) {
-            deployed.pauserHook = PauserHookDeployer.deploy(vault, timelock, pauser, unpauser);
+            deployed.pauserHook = PauserHookDeployer.deploy(deployed.metaHooks, timelock, pauser, unpauser);
             hooks[index++] = IHooks(deployed.pauserHook);
         }
 
         if (config.deployFeeHook) {
-            deployed.feeHook = FeeHookDeployer.deploy(vault, timelock, config.feeHook.performanceFee);
+            deployed.feeHook = FeeHookDeployer.deploy(deployed.metaHooks, timelock, config.feeHook.performanceFee);
             hooks[index++] = IHooks(deployed.feeHook);
         }
 
         if (config.deployProcessAccountingGuardHook) {
-            deployed.processAccountingGuardHook =
-                ProcessAccountingGuardHookDeployer.deploy(vault, timelock, config.processAccountingGuardHook);
+            deployed.processAccountingGuardHook = ProcessAccountingGuardHookDeployer.deploy(
+                deployed.metaHooks, timelock, config.processAccountingGuardHook
+            );
             hooks[index++] = IHooks(deployed.processAccountingGuardHook);
         }
 
-        MetaHooks metaHooks = new MetaHooks(vault, address(this), address(this));
         metaHooks.setHooks(hooks);
         metaHooks.grantRole(DEFAULT_ADMIN_ROLE, timelock);
         metaHooks.grantRole(HOOK_MANAGER_ROLE, timelock);
         metaHooks.renounceRole(HOOK_MANAGER_ROLE, address(this));
         metaHooks.renounceRole(DEFAULT_ADMIN_ROLE, address(this));
-
-        deployed.metaHooks = address(metaHooks);
     }
 
     function _hookCount(IVaultFactory.HooksConfig memory config) internal pure returns (uint256 count) {

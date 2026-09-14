@@ -1092,7 +1092,7 @@ contract VaultFactoryTest is Test {
         assertFalse(metaHooks.hasRole(metaHooks.HOOK_MANAGER_ROLE(), address(factory)));
 
         IPauserHookView pauserHook = IPauserHookView(created.pauserHook);
-        assertEq(pauserHook.VAULT(), created.vault);
+        assertEq(pauserHook.VAULT(), created.metaHooks);
         assertTrue(pauserHook.hasRole(pauserHook.DEFAULT_ADMIN_ROLE(), created.timelock));
         assertTrue(pauserHook.hasRole(pauserHook.PAUSER_ROLE(), pauser));
         assertTrue(pauserHook.hasRole(pauserHook.UNPAUSER_ROLE(), unpauser));
@@ -1101,14 +1101,14 @@ contract VaultFactoryTest is Test {
         }
 
         IFeeHookView feeHook = IFeeHookView(created.feeHook);
-        assertEq(feeHook.VAULT(), created.vault);
+        assertEq(feeHook.VAULT(), created.metaHooks);
         assertEq(feeHook.owner(), created.timelock);
         assertEq(feeHook.performanceFee(), hooksConfig.feeHook.performanceFee);
         assertEq(feeHook.performanceFeeRecipient(), created.timelock);
         _assertFeeHookConfig(feeHook.getConfig());
 
         IProcessAccountingGuardHookView guard = IProcessAccountingGuardHookView(created.processAccountingGuardHook);
-        assertEq(guard.VAULT(), created.vault);
+        assertEq(guard.VAULT(), created.metaHooks);
         assertEq(guard.owner(), created.timelock);
         assertEq(
             guard.maxTotalAssetsDecreaseRatio(), hooksConfig.processAccountingGuardHook.maxTotalAssetsDecreaseRatio
