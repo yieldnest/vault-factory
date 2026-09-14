@@ -13,6 +13,7 @@ import {RegistryImplementations} from "script/RegistryImplementations.sol";
 import {SafeTestLib} from "test/lib/SafeTestLib.sol";
 import {TestConstants} from "test/lib/TestConstants.sol";
 import {ISafe} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/ISafe.sol";
+import {HooksLib} from "lib/yieldnest-vault/src/library/HooksLib.sol";
 import {PauserHook} from "lib/yieldnest-vault-periphery/src/hooks/PauserHook.sol";
 
 interface IVaultHooksFlow {
@@ -105,7 +106,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         _unpause(PauserHook.HookCall.Mint);
 
         _pause(PauserHook.HookCall.ProcessAccounting);
-        vm.expectRevert();
+        _expectPausedHookRevert(PauserHook.HookCall.ProcessAccounting);
         IVaultHooksFlow(created.vault).processAccounting();
         _unpause(PauserHook.HookCall.ProcessAccounting);
 
@@ -119,14 +120,14 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
 
         _pause(PauserHook.HookCall.Withdraw);
         vm.prank(TestConstants.DEPOSITOR);
-        vm.expectRevert();
+        _expectPausedHookRevert(PauserHook.HookCall.Withdraw);
         IVaultHooksFlow(created.vault).withdraw(1e6, TestConstants.DEPOSITOR, TestConstants.DEPOSITOR);
         _unpause(PauserHook.HookCall.Withdraw);
 
         uint256 redeemShares = IVaultHooksFlow(created.vault).previewWithdraw(1e6);
         _pause(PauserHook.HookCall.Redeem);
         vm.prank(TestConstants.DEPOSITOR);
-        vm.expectRevert();
+        _expectPausedHookRevert(PauserHook.HookCall.Redeem);
         IVaultHooksFlow(created.vault).redeem(redeemShares, TestConstants.DEPOSITOR, TestConstants.DEPOSITOR);
         _unpause(PauserHook.HookCall.Redeem);
     }
@@ -186,7 +187,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         vm.prank(TestConstants.PROCESSOR);
         IAccountingModuleHooksFlow(created.accountingModule).processRewards(rewards);
 
-        vm.expectRevert();
+        vm.expectPartialRevert(HooksLib.HookCallFailed.selector);
         IVaultHooksFlow(created.vault).processAccounting();
 
         assertEq(IVaultHooksFlow(created.vault).totalAssets(), totalAssetsBefore, "assets rolled back");
@@ -232,7 +233,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
 
         vm.startPrank(depositor);
         IERC20(TestConstants.USDC).approve(created.vault, amount);
-        vm.expectRevert();
+        _expectPausedHookRevert(PauserHook.HookCall.Deposit);
         IVaultHooksFlow(created.vault).deposit(amount, depositor);
         vm.stopPrank();
     }
@@ -242,9 +243,17 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
 
         vm.startPrank(depositor);
         IERC20(TestConstants.USDC).approve(created.vault, 1e6);
-        vm.expectRevert();
+        _expectPausedHookRevert(PauserHook.HookCall.Mint);
         IVaultHooksFlow(created.vault).mint(shares, depositor);
         vm.stopPrank();
+    }
+
+    function _expectPausedHookRevert(PauserHook.HookCall hookCall) internal {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                HooksLib.HookCallFailed.selector, abi.encodeWithSelector(PauserHook.Paused.selector, hookCall)
+            )
+        );
     }
 
     function _depositToVault(address depositor, uint256 amount) internal returns (uint256 shares) {
