@@ -62,9 +62,9 @@ library HooksVerifierLib {
             IFeeHookView feeHook = IFeeHookView(created.feeHook);
             _verify(created.feeHook.code.length != 0, "fee hook code");
             _verify(feeHook.VAULT() == created.metaHooks, "fee hook vault");
-            _verify(feeHook.owner() == created.timelock, "fee hook owner");
+            _verify(feeHook.owner() == vaultParams.admin, "fee hook owner");
             _verify(feeHook.performanceFee() == config.feeHook.performanceFee, "fee hook performance fee");
-            _verify(feeHook.performanceFeeRecipient() == created.timelock, "fee hook recipient");
+            _verify(feeHook.performanceFeeRecipient() == config.feeHook.feeRecipient, "fee hook recipient");
             _verifyFeeHookConfig(feeHook.getConfig());
         } else {
             _verify(created.feeHook == address(0), "unexpected fee hook");

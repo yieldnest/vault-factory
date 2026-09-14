@@ -197,7 +197,9 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         }
 
         VaultHooksDeployer.DeployedHooks memory hooks =
-            VaultHooksDeployer.deploy(created.vault, created.timelock, params.pauser, params.unpauser, hooksConfig);
+            VaultHooksDeployer.deploy(
+                created.vault, created.timelock, params.admin, params.pauser, params.unpauser, hooksConfig
+            );
         created.metaHooks = hooks.metaHooks;
         created.pauserHook = hooks.pauserHook;
         created.feeHook = hooks.feeHook;

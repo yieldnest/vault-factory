@@ -20,6 +20,7 @@ interface IVaultHooksFlow {
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
     function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets);
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
     function processAccounting() external;
     function processor(address[] calldata targets, uint256[] calldata values, bytes[] calldata data)
         external
@@ -48,6 +49,17 @@ interface IHookName {
 contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
     uint256 private constant BOOTSTRAP_AMOUNT = 1e6;
     uint256 private constant PERFORMANCE_FEE = 0.1e18;
+    address private constant FEE_RECIPIENT = 0x1000000000000000000000000000000000000014;
+
+    struct FeeAccountingSnapshot {
+        address feeRecipient;
+        uint256 totalAssets;
+        uint256 totalSupply;
+        uint256 vaultStrategyShares;
+        uint256 strategyAssets;
+        uint256 vaultStrategyAssets;
+        uint256 feeRecipientShares;
+    }
 
     IRegistry private registry;
     VaultFactory private factory;
@@ -126,9 +138,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         _depositToVault(TestConstants.DEPOSITOR, userDeposit);
         _moveVaultAssetsToFlexStrategy(userDeposit);
 
-        uint256 totalAssetsBefore = IVaultHooksFlow(created.vault).totalAssets();
-        uint256 totalSupplyBefore = IVaultHooksFlow(created.vault).totalSupply();
-        uint256 feeRecipientSharesBefore = IERC20(created.vault).balanceOf(created.timelock);
+        FeeAccountingSnapshot memory beforeAccounting = _feeAccountingSnapshot();
 
         skip(365 days);
         vm.prank(TestConstants.PROCESSOR);
@@ -137,13 +147,20 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         IVaultHooksFlow(created.vault).processAccounting();
 
         uint256 totalAssetsAfter = IVaultHooksFlow(created.vault).totalAssets();
-        uint256 yieldBaseAssets = totalAssetsAfter - totalAssetsBefore;
+        uint256 strategyAssetsAdded = IVaultHooksFlow(created.flexStrategy).totalAssets() - beforeAccounting.strategyAssets;
+        uint256 vaultStrategyAssetsAdded = IVaultHooksFlow(created.flexStrategy).convertToAssets(
+            beforeAccounting.vaultStrategyShares
+        ) - beforeAccounting.vaultStrategyAssets;
+        uint256 yieldBaseAssets = totalAssetsAfter - beforeAccounting.totalAssets;
         uint256 feeBaseAssets = yieldBaseAssets * PERFORMANCE_FEE / 1e18;
-        uint256 expectedFeeShares = feeBaseAssets * totalSupplyBefore / (totalAssetsAfter - feeBaseAssets);
+        uint256 expectedFeeShares = feeBaseAssets * beforeAccounting.totalSupply / (totalAssetsAfter - feeBaseAssets);
 
+        assertEq(strategyAssetsAdded, rewards, "strategy assets added");
+        assertEq(yieldBaseAssets, vaultStrategyAssetsAdded, "vault assets added");
+        assertLt(yieldBaseAssets, rewards, "vault assets added excludes bootstrap holder rewards");
         assertGt(expectedFeeShares, 0, "expected fee shares");
         assertEq(
-            IERC20(created.vault).balanceOf(created.timelock) - feeRecipientSharesBefore,
+            IERC20(created.vault).balanceOf(beforeAccounting.feeRecipient) - beforeAccounting.feeRecipientShares,
             expectedFeeShares,
             "fee shares"
         );
@@ -162,7 +179,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         _moveVaultAssetsToFlexStrategy(userDeposit);
 
         uint256 totalAssetsBefore = IVaultHooksFlow(created.vault).totalAssets();
-        uint256 feeRecipientSharesBefore = IERC20(created.vault).balanceOf(created.timelock);
+        uint256 feeRecipientSharesBefore = IERC20(created.vault).balanceOf(FEE_RECIPIENT);
 
         skip(365 days);
         vm.prank(TestConstants.PROCESSOR);
@@ -172,7 +189,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         IVaultHooksFlow(created.vault).processAccounting();
 
         assertEq(IVaultHooksFlow(created.vault).totalAssets(), totalAssetsBefore, "assets rolled back");
-        assertEq(IERC20(created.vault).balanceOf(created.timelock), feeRecipientSharesBefore, "fee rolled back");
+        assertEq(IERC20(created.vault).balanceOf(FEE_RECIPIENT), feeRecipientSharesBefore, "fee rolled back");
     }
 
     function _createVault(
@@ -186,6 +203,17 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
         deployed = factory.createVault(vaultParams, flexParams, hooksConfig);
         vm.stopPrank();
+    }
+
+    function _feeAccountingSnapshot() internal view returns (FeeAccountingSnapshot memory snapshot) {
+        snapshot.feeRecipient = FEE_RECIPIENT;
+        snapshot.totalAssets = IVaultHooksFlow(created.vault).totalAssets();
+        snapshot.totalSupply = IVaultHooksFlow(created.vault).totalSupply();
+        snapshot.vaultStrategyShares = IERC20(created.flexStrategy).balanceOf(created.vault);
+        snapshot.strategyAssets = IVaultHooksFlow(created.flexStrategy).totalAssets();
+        snapshot.vaultStrategyAssets =
+            IVaultHooksFlow(created.flexStrategy).convertToAssets(snapshot.vaultStrategyShares);
+        snapshot.feeRecipientShares = IERC20(created.vault).balanceOf(snapshot.feeRecipient);
     }
 
     function _pause(PauserHook.HookCall hookCall) internal {
@@ -340,7 +368,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
             deployPauserHook: true,
             deployFeeHook: true,
             deployProcessAccountingGuardHook: true,
-            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE}),
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE, feeRecipient: FEE_RECIPIENT}),
             processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
                 maxTotalAssetsDecreaseRatio: 1e18,
                 maxTotalAssetsIncreaseRatio: maxTotalAssetsIncreaseRatio,

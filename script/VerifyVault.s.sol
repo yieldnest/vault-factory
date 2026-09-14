@@ -12,6 +12,7 @@ contract VerifyVault is Script {
     /// @notice Ethereum mainnet USDC, used as both base and default asset.
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant OFF_RAMP = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
+    address internal constant FEE_RECIPIENT = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
 
     uint256 internal constant TIMELOCK_DURATION = 15 seconds;
     uint256 internal constant MIN_WITHDRAWAL_AMOUNT = 0.1 ether;
@@ -130,7 +131,7 @@ contract VerifyVault is Script {
             deployPauserHook: DEPLOY_PAUSER_HOOK,
             deployFeeHook: DEPLOY_FEE_HOOK,
             deployProcessAccountingGuardHook: DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK,
-            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE}),
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE, feeRecipient: FEE_RECIPIENT}),
             processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
                 maxTotalAssetsDecreaseRatio: MAX_TOTAL_ASSETS_DECREASE_RATIO,
                 maxTotalAssetsIncreaseRatio: MAX_TOTAL_ASSETS_INCREASE_RATIO,

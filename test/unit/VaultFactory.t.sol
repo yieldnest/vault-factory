@@ -787,6 +787,7 @@ contract MockSafeGuard {
 
 contract VaultFactoryTest is Test {
     bytes32 private constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
+    address private constant FEE_RECIPIENT = address(0xFEE);
 
     address private admin = address(0xA11CE);
     address private proposer = address(0xA110);
@@ -1102,9 +1103,9 @@ contract VaultFactoryTest is Test {
 
         IFeeHookView feeHook = IFeeHookView(created.feeHook);
         assertEq(feeHook.VAULT(), created.metaHooks);
-        assertEq(feeHook.owner(), created.timelock);
+        assertEq(feeHook.owner(), admin);
         assertEq(feeHook.performanceFee(), hooksConfig.feeHook.performanceFee);
-        assertEq(feeHook.performanceFeeRecipient(), created.timelock);
+        assertEq(feeHook.performanceFeeRecipient(), hooksConfig.feeHook.feeRecipient);
         _assertFeeHookConfig(feeHook.getConfig());
 
         IProcessAccountingGuardHookView guard = IProcessAccountingGuardHookView(created.processAccountingGuardHook);
@@ -1597,7 +1598,7 @@ contract VaultFactoryTest is Test {
             deployPauserHook: true,
             deployFeeHook: true,
             deployProcessAccountingGuardHook: true,
-            feeHook: IVaultFactory.FeeHookConfig({performanceFee: 0.1e18}),
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: 0.1e18, feeRecipient: FEE_RECIPIENT}),
             processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
                     maxTotalAssetsDecreaseRatio: 0.2e18,
                     maxTotalAssetsIncreaseRatio: 0.3e18,

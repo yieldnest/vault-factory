@@ -22,6 +22,7 @@ library VaultHooksDeployer {
     function deploy(
         address vault,
         address timelock,
+        address admin,
         address pauser,
         address unpauser,
         IVaultFactory.HooksConfig memory config
@@ -41,7 +42,9 @@ library VaultHooksDeployer {
         }
 
         if (config.deployFeeHook) {
-            deployed.feeHook = FeeHookDeployer.deploy(deployed.metaHooks, timelock, config.feeHook.performanceFee);
+            deployed.feeHook = FeeHookDeployer.deploy(
+                deployed.metaHooks, admin, config.feeHook.performanceFee, config.feeHook.feeRecipient
+            );
             hooks[index++] = IHooks(deployed.feeHook);
         }
 

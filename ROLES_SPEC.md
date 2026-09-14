@@ -122,7 +122,7 @@ For `PauserHook`, the timelock holds:
 
 - `DEFAULT_ADMIN_ROLE`
 
-For `FeeHooks`, the timelock is the owner and receives minted performance-fee shares.
+For `FeeHooks`, `ADMIN` is the owner. The configured fee recipient receives minted performance-fee shares.
 
 For `ProcessAccountingGuardHook`, the timelock is the owner.
 

@@ -185,9 +185,9 @@ Order matters because hook callbacks run in configured order.
 
 `FeeHooks` is configured with:
 
-- owner: deployment timelock
+- owner: `admin`
 - performance fee: hooks config `performanceFee`
-- performance fee recipient: deployment timelock
+- performance fee recipient: hooks config `feeRecipient`
 - hook flags: only `afterProcessAccounting = true`
 
 `ProcessAccountingGuardHook` is configured with:

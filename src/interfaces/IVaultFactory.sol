@@ -47,6 +47,7 @@ interface IVaultFactory {
 
     struct FeeHookConfig {
         uint256 performanceFee;
+        address feeRecipient;
     }
 
     struct HooksConfig {
