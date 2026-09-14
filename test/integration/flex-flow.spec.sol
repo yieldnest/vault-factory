@@ -99,6 +99,59 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy convert shares");
     }
 
+    function test_Flex_Deposit_Preserves_Conversion_Rates() public {
+        uint256 depositAmount = 10e6;
+
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault assets before");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault shares before");
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy assets before");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy shares before");
+
+        uint256 shares = _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+
+        assertEq(shares, depositAmount * 1e12, "deposit shares");
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault assets after");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault shares after");
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy assets after");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy shares after");
+    }
+
+    function test_Flex_Deposit_Rewards_Increase_Conversion_Rates() public {
+        uint256 depositAmount = 1_000_000e6;
+        uint256 rewards = 10_000e6;
+
+        uint256 vaultAssetsBefore = IVaultFlow(created.vault).convertToAssets(1e18);
+        uint256 vaultSharesBefore = IVaultFlow(created.vault).convertToShares(1e6);
+        uint256 strategyAssetsBefore = IVaultFlow(created.flexStrategy).convertToAssets(1e6);
+        uint256 strategySharesBefore = IVaultFlow(created.flexStrategy).convertToShares(1e6);
+
+        _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+        _moveVaultAssetsToFlexStrategy(depositAmount);
+
+        uint256 vaultTotalAssetsBeforeRewards = IVaultFlow(created.vault).totalAssets();
+        uint256 vaultStrategyShares = IERC20(created.flexStrategy).balanceOf(created.vault);
+        uint256 vaultStrategyAssetsBeforeRewards = IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+
+        skip(365 days);
+        vm.prank(TestConstants.PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processRewards(rewards);
+
+        uint256 vaultStrategyAssetsAfterRewards = IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+        uint256 vaultTotalAssetsAfterRewards = IVaultFlow(created.vault).totalAssets();
+
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1_009_999, "strategy assets rate");
+        assertLt(IVaultFlow(created.flexStrategy).convertToShares(1e6), strategySharesBefore, "strategy shares rate");
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1_009_999, "vault assets rate");
+        assertGt(IVaultFlow(created.flexStrategy).convertToAssets(1e6), strategyAssetsBefore, "strategy assets rate increased");
+        assertGt(IVaultFlow(created.vault).convertToAssets(1e18), vaultAssetsBefore, "vault assets rate increased");
+        assertLt(IVaultFlow(created.vault).convertToShares(1e6), vaultSharesBefore, "vault shares rate");
+        assertEq(
+            vaultTotalAssetsAfterRewards - vaultTotalAssetsBeforeRewards,
+            vaultStrategyAssetsAfterRewards - vaultStrategyAssetsBeforeRewards,
+            "vault reward assets"
+        );
+    }
+
     function testFuzz_Flex_Deposit_Processor_Move_And_Guarded_OffRamp(uint256 depositAmount) public {
         depositAmount = bound(depositAmount, MIN_DEPOSIT_AMOUNT, MAX_DEPOSIT_AMOUNT);
 
