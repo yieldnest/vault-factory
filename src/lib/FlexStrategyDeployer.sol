@@ -173,14 +173,7 @@ library FlexStrategyDeployer {
 
     function _configureStrategy(Config memory cfg, FlexSystem memory sys) internal {
         IFlexStrategy strategy = IFlexStrategy(sys.strategy);
-
-        // Temporary roles for wiring; renounced in _renounceTemporaryRoles. ALLOCATOR_ROLE stays
-        // with the factory until the strategy bootstrap deposit is done.
-        strategy.grantRole(PROCESSOR_MANAGER_ROLE, address(this));
-        strategy.grantRole(ALLOCATOR_MANAGER_ROLE, address(this));
-        strategy.grantRole(HOOKS_MANAGER_ROLE, address(this));
-        strategy.grantRole(UNPAUSER_ROLE, address(this));
-        strategy.grantRole(ALLOCATOR_ROLE, address(this));
+        _grantTemporaryRoles(strategy);
 
         // Final roles: actors for operations, the vault timelock for everything critical.
         strategy.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
@@ -241,6 +234,17 @@ library FlexStrategyDeployer {
             rewardsSweeper.grantRole(REWARDS_SWEEPER_ROLE, cfg.processor);
             rewardsSweeper.grantRole(SNAPSHOT_REWARDS_SWEEPER_ROLE, cfg.processor);
         }
+    }
+
+    /// @dev The factory's setup roles on the strategy. DEFAULT_ADMIN_ROLE and
+    /// ACCOUNTING_MODULE_MANAGER_ROLE are granted by the strategy initializer and renounced below.
+    /// ALLOCATOR_ROLE stays with the factory until the strategy bootstrap deposit is done.
+    function _grantTemporaryRoles(IFlexStrategy strategy) internal {
+        strategy.grantRole(PROCESSOR_MANAGER_ROLE, address(this));
+        strategy.grantRole(ALLOCATOR_MANAGER_ROLE, address(this));
+        strategy.grantRole(HOOKS_MANAGER_ROLE, address(this));
+        strategy.grantRole(UNPAUSER_ROLE, address(this));
+        strategy.grantRole(ALLOCATOR_ROLE, address(this));
     }
 
     function _renounceTemporaryRoles(FlexSystem memory sys) internal {
