@@ -2,8 +2,6 @@
 @openzeppelin/contracts/=lib/yieldnest-vault/lib/openzeppelin-contracts/contracts/
 forge-std/=lib/forge-std/src/
 yieldnest-vault-withdrawals/=lib/yieldnest-vault-withdrawals/
-lib/yieldnest-vault:src/=lib/yieldnest-vault/src/
-lib/yieldnest-vault-periphery:src/=lib/yieldnest-vault-periphery/src/
 src/interface/IRequestPolicy.sol=lib/yieldnest-vault-withdrawals/src/interface/IRequestPolicy.sol
 src/Common.sol=lib/yieldnest-vault/src/Common.sol
 src/Vault.sol=lib/yieldnest-vault/src/Vault.sol
