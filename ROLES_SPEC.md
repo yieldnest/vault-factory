@@ -109,6 +109,23 @@ The timelock is the owner of the Main Vault `ProxyAdmin`.
 
 When a wrapped token is deployed, the timelock is the owner of the wrapped token `ProxyAdmin`.
 
+### Main Vault Hooks
+
+When Main Vault hooks are deployed, the timelock controls hook configuration.
+
+For `MetaHooks`, the timelock holds:
+
+- `DEFAULT_ADMIN_ROLE`
+- `HOOK_MANAGER_ROLE`
+
+For `PauserHook`, the timelock holds:
+
+- `DEFAULT_ADMIN_ROLE`
+
+For `FeeHooks`, the timelock is the owner and receives minted performance-fee shares.
+
+For `ProcessAccountingGuardHook`, the timelock is the owner.
+
 ### WithdrawalRequest
 
 The timelock holds:

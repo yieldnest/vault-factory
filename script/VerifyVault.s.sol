@@ -20,6 +20,14 @@ contract VerifyVault is Script {
     uint256 internal constant TARGET_APY = 0.05e18;
     uint256 internal constant LOWER_BOUND = 0.01e18;
     uint256 internal constant MIN_REWARDABLE_ASSETS = 100e6;
+    bool internal constant DEPLOY_PAUSER_HOOK = false;
+    bool internal constant DEPLOY_FEE_HOOK = false;
+    bool internal constant DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK = false;
+    uint256 internal constant PERFORMANCE_FEE = 0;
+    uint256 internal constant MAX_TOTAL_ASSETS_DECREASE_RATIO = 0;
+    uint256 internal constant MAX_TOTAL_ASSETS_INCREASE_RATIO = 0;
+    uint256 internal constant MAX_TOTAL_SUPPLY_INCREASE_RATIO = 0;
+    uint256 internal constant EXPECTED_PERFORMANCE_FEE = 0;
 
     function run() external returns (bool ok) {
         string memory defaultPath = string.concat("deployments/rwa-vault-", vm.toString(block.chainid), ".json");
@@ -38,7 +46,11 @@ contract VerifyVault is Script {
         }
 
         VaultVerifier.Verification memory verification = VaultVerifier.Verification({
-            factory: factory, created: created, vaultParams: _vaultParams(proposer), flexParams: _flexParams()
+            factory: factory,
+            created: created,
+            vaultParams: _vaultParams(proposer),
+            flexParams: _flexParams(),
+            hooksConfig: _hooksConfig()
         });
 
         VaultVerifier verifier = new VaultVerifier();
@@ -56,6 +68,10 @@ contract VerifyVault is Script {
             timelock: vm.parseJsonAddress(json, ".timelock"),
             wrappedToken: vm.parseJsonAddress(json, ".wrappedToken"),
             provider: vm.parseJsonAddress(json, ".provider"),
+            metaHooks: vm.parseJsonAddress(json, ".metaHooks"),
+            pauserHook: vm.parseJsonAddress(json, ".pauserHook"),
+            feeHook: vm.parseJsonAddress(json, ".feeHook"),
+            processAccountingGuardHook: vm.parseJsonAddress(json, ".processAccountingGuardHook"),
             withdrawalRequest: vm.parseJsonAddress(json, ".withdrawalRequest"),
             withdrawer: vm.parseJsonAddress(json, ".withdrawer"),
             bagFactory: vm.parseJsonAddress(json, ".bagFactory"),
@@ -106,6 +122,21 @@ contract VerifyVault is Script {
             strategySymbol: "WLFUSDC-FLEX",
             accountingTokenName: "Whitelabel USDC Flex Accounting",
             accountingTokenSymbol: "aWLFUSDC"
+        });
+    }
+
+    function _hooksConfig() internal pure returns (IVaultFactory.HooksConfig memory) {
+        return IVaultFactory.HooksConfig({
+            deployPauserHook: DEPLOY_PAUSER_HOOK,
+            deployFeeHook: DEPLOY_FEE_HOOK,
+            deployProcessAccountingGuardHook: DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK,
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE}),
+            processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
+                maxTotalAssetsDecreaseRatio: MAX_TOTAL_ASSETS_DECREASE_RATIO,
+                maxTotalAssetsIncreaseRatio: MAX_TOTAL_ASSETS_INCREASE_RATIO,
+                maxTotalSupplyIncreaseRatio: MAX_TOTAL_SUPPLY_INCREASE_RATIO,
+                expectedPerformanceFee: EXPECTED_PERFORMANCE_FEE
+            })
         });
     }
 }

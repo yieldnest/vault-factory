@@ -10,7 +10,6 @@ import {IAccountingToken} from "src/interfaces/external/IAccountingToken.sol";
 import {IBeaconProxyFactory} from "src/interfaces/external/IBeaconProxyFactory.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IFlexStrategy} from "src/interfaces/external/IFlexStrategy.sol";
-import {ISafeGuard} from "src/interfaces/external/ISafeGuard.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
 import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol";
 import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
@@ -18,6 +17,9 @@ import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 import {FlexProvider} from "src/provider/FlexProvider.sol";
+import {AccountingModuleHookVerifierLib} from "src/verifier/AccountingModuleHookVerifierLib.sol";
+import {HooksVerifierLib} from "src/verifier/HooksVerifierLib.sol";
+import {SafeGuardVerifierLib} from "src/verifier/SafeGuardVerifierLib.sol";
 import {TimelockVerifierLib} from "src/verifier/TimelockVerifierLib.sol";
 
 library VaultVerifierLib {
@@ -44,7 +46,6 @@ library VaultVerifierLib {
     bytes32 internal constant LOSS_PROCESSOR_ROLE = keccak256("LOSS_PROCESSOR_ROLE");
     bytes32 internal constant REWARDS_SWEEPER_ROLE = keccak256("REWARDS_SWEEPER_ROLE");
     bytes32 internal constant SNAPSHOT_REWARDS_SWEEPER_ROLE = keccak256("SNAPSHOT_REWARDS_SWEEPER_ROLE");
-    bytes32 internal constant GUARD_ADMIN_ROLE = keccak256("GUARD_ADMIN_ROLE");
     bytes32 internal constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
     bytes32 internal constant CONFIGURATION_MANAGER_ROLE = keccak256("CONFIGURATION_MANAGER_ROLE");
     bytes32 internal constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
@@ -55,6 +56,7 @@ library VaultVerifierLib {
         IVaultFactory.CreatedVault created;
         IVaultFactory.VaultParams vaultParams;
         IVaultFactory.FlexStrategyParams flexParams;
+        IVaultFactory.HooksConfig hooksConfig;
     }
 
     error VerificationFailed(string check);
@@ -69,13 +71,18 @@ library VaultVerifierLib {
 
         _verifyTimelockRoles(verification);
         _verifyVaultConfig(vault, verification, effectiveBaseAsset, baseAssetDecimals);
+        HooksVerifierLib.verify(
+            verification.factory, verification.created, verification.vaultParams, verification.hooksConfig
+        );
         _verifyProvider(verification, effectiveBaseAsset);
         _verifyWithdrawalSystem(verification);
 
         if (verification.flexParams.deployStrategy) {
             _verifyFlexStrategy(verification);
-            _verifySafeGuard(verification);
-            _verifyHooks(verification);
+            SafeGuardVerifierLib.verify(
+                verification.factory, verification.created, verification.vaultParams, verification.flexParams
+            );
+            AccountingModuleHookVerifierLib.verify(verification.created);
         } else {
             _verifyNoFlexComponents(verification.created);
         }
@@ -282,42 +289,6 @@ library VaultVerifierLib {
         }
     }
 
-    function _verifySafeGuard(Verification memory verification) internal view {
-        IVaultFactory.CreatedVault memory created = verification.created;
-        IVaultFactory.VaultParams memory vaultParams = verification.vaultParams;
-        IVaultFactory.FlexStrategyParams memory flexParams = verification.flexParams;
-
-        ISafeGuardView safeGuard = ISafeGuardView(created.safeGuard);
-        _verify(created.safeGuard.code.length != 0, "safeguard code");
-        _verifyString(safeGuard.name(), string.concat(flexParams.strategyName, " Safeguard"), "safeguard name");
-        _verifyRole(safeGuard, DEFAULT_ADMIN_ROLE, created.timelock, true, "safeguard admin");
-        _verifyRole(safeGuard, PROCESSOR_MANAGER_ROLE, created.timelock, true, "safeguard processor manager");
-        _verifyRole(safeGuard, GUARD_ADMIN_ROLE, created.timelock, true, "safeguard guard admin");
-        _verifyRole(safeGuard, DEFAULT_ADMIN_ROLE, verification.factory, false, "safeguard dangling admin");
-        _verifyRole(
-            safeGuard, PROCESSOR_MANAGER_ROLE, verification.factory, false, "safeguard dangling processor manager"
-        );
-        _verifyRole(safeGuard, GUARD_ADMIN_ROLE, verification.factory, false, "safeguard dangling guard admin");
-
-        ISafeGuard.FunctionRule memory rule =
-            safeGuard.getProcessorRule(vaultParams.baseAsset, IERC20.transfer.selector);
-        _verify(rule.isActive, "safeguard transfer inactive");
-        _verify(rule.validator == address(0), "safeguard transfer validator");
-        _verify(rule.paramRules.length == 2, "safeguard transfer params");
-        _verifyAddressParam(rule.paramRules[0], flexParams.offRampAddress, "safeguard transfer recipient");
-        _verifyUintParam(rule.paramRules[1], "safeguard transfer amount");
-    }
-
-    function _verifyHooks(Verification memory verification) internal view {
-        IVaultFactory.CreatedVault memory created = verification.created;
-        IAccountingModuleHookView hook = IAccountingModuleHookView(created.accountingModuleHook);
-
-        _verify(created.accountingModuleHook.code.length != 0, "hook code");
-        _verify(address(hook.VAULT()) == created.flexStrategy, "hook vault");
-        _verify(address(hook.flexStrategy()) == created.flexStrategy, "hook strategy");
-        _verify(address(hook.accountingModule()) == created.accountingModule, "hook module");
-    }
-
     function _verifyNoFlexComponents(IVaultFactory.CreatedVault memory created) internal pure {
         _verify(created.safeGuard == address(0), "unexpected safeguard");
         _verify(created.accountingModuleHook == address(0), "unexpected hook");
@@ -486,24 +457,8 @@ library VaultVerifierLib {
         _verify(param.allowList[0] == allowed, check);
     }
 
-    function _verifyAddressParam(ISafeGuard.ParamRule memory param, address allowed, string memory check)
-        internal
-        pure
-    {
-        _verify(uint256(param.paramType) == uint256(ISafeGuard.ParamType.ADDRESS), check);
-        _verify(!param.isArray, check);
-        _verify(param.allowList.length == 1, check);
-        _verify(param.allowList[0] == allowed, check);
-    }
-
     function _verifyUintParam(IVault.ParamRule memory param, string memory check) internal pure {
         _verify(uint256(param.paramType) == uint256(IVault.ParamType.UINT256), check);
-        _verify(!param.isArray, check);
-        _verify(param.allowList.length == 0, check);
-    }
-
-    function _verifyUintParam(ISafeGuard.ParamRule memory param, string memory check) internal pure {
-        _verify(uint256(param.paramType) == uint256(ISafeGuard.ParamType.UINT256), check);
         _verify(!param.isArray, check);
         _verify(param.allowList.length == 0, check);
     }
@@ -566,16 +521,6 @@ interface IAccountingTokenView is IAccountingToken, IAccessControlView {}
 interface IAccountingModuleView is IAccountingModule, IAccessControlView {}
 
 interface IRewardsSweeperView is IAccessControlView {
-    function accountingModule() external view returns (address);
-}
-
-interface ISafeGuardView is ISafeGuard, IAccessControlView {
-    function name() external view returns (string memory);
-}
-
-interface IAccountingModuleHookView {
-    function VAULT() external view returns (address);
-    function flexStrategy() external view returns (address);
     function accountingModule() external view returns (address);
 }
 

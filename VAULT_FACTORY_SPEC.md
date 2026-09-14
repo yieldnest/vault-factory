@@ -165,7 +165,40 @@ The registry keys used by the factory are fixed constants compiled into the fact
 
 ### Hooks
 
-The Main Vault does not deploy or attach hooks currently.
+The Main Vault can deploy and attach hooks according to an explicit hooks configuration.
+
+If at least one Main Vault hook is enabled, the factory deploys one `MetaHooks` instance and attaches it to the Main Vault. The deployment timelock owns the `MetaHooks` admin and hook-manager roles.
+
+Enabled hooks are installed under `MetaHooks` in this order:
+
+1. `PauserHook`
+2. `FeeHooks`
+3. `ProcessAccountingGuardHook`
+
+Order matters because hook callbacks run in configured order.
+
+`PauserHook` starts with all hook calls unpaused. It is configured with:
+
+- default admin: deployment timelock
+- pauser: `pauser`
+- unpauser: `unpauser`
+
+`FeeHooks` is configured with:
+
+- owner: deployment timelock
+- performance fee: hooks config `performanceFee`
+- performance fee recipient: deployment timelock
+- hook flags: only `afterProcessAccounting = true`
+
+`ProcessAccountingGuardHook` is configured with:
+
+- owner: deployment timelock
+- `maxTotalAssetsDecreaseRatio`
+- `maxTotalAssetsIncreaseRatio`
+- `maxTotalSupplyIncreaseRatio`
+- `expectedPerformanceFee`
+
+`FeeHooks` and `ProcessAccountingGuardHook` are only valid when the Main Vault uses cached accounting (`alwaysComputeTotalAssets = false`). The factory rejects configurations that enable either of them while `alwaysComputeTotalAssets = true`.
 
 When the optional flex strategy is deployed, the factory deploys an `AccountingModuleHook` for the FlexStrategy and attaches it to the FlexStrategy.
 

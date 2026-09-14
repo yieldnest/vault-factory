@@ -117,7 +117,7 @@ contract VaultFactoryIntegrationTest is Test {
 
         vm.startPrank(TestConstants.CREATOR);
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT);
-        created = factory.createVault(_vaultParams(), _emptyFlexParams());
+        created = factory.createVault(_vaultParams(), _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -158,7 +158,8 @@ contract VaultFactoryIntegrationTest is Test {
                     factory: address(factory),
                     created: created,
                     vaultParams: _vaultParams(),
-                    flexParams: _emptyFlexParams()
+                    flexParams: _emptyFlexParams(),
+                    hooksConfig: _emptyHooksConfig()
                 })
             ),
             "verification"
@@ -291,7 +292,7 @@ contract VaultFactoryIntegrationTest is Test {
         vm.startPrank(TestConstants.CREATOR);
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT);
         vm.expectRevert(abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.SAFE_GUARD));
-        factory.createVault(_vaultParams(), flexParams);
+        factory.createVault(_vaultParams(), flexParams, _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -348,6 +349,8 @@ contract VaultFactoryIntegrationTest is Test {
     function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory flexParams) {
         flexParams.deployStrategy = false;
     }
+
+    function _emptyHooksConfig() internal pure returns (IVaultFactory.HooksConfig memory hooksConfig) {}
 
     function _proxyAdminOwner(address proxy) internal view returns (address) {
         address proxyAdmin = address(uint160(uint256(vm.load(proxy, TestConstants.ERC1967_ADMIN_SLOT))));

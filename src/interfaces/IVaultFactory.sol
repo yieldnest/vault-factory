@@ -38,11 +38,34 @@ interface IVaultFactory {
         string accountingTokenSymbol;
     }
 
+    struct ProcessAccountingGuardHookConfig {
+        uint256 maxTotalAssetsDecreaseRatio;
+        uint256 maxTotalAssetsIncreaseRatio;
+        uint256 maxTotalSupplyIncreaseRatio;
+        uint256 expectedPerformanceFee;
+    }
+
+    struct FeeHookConfig {
+        uint256 performanceFee;
+    }
+
+    struct HooksConfig {
+        bool deployPauserHook;
+        bool deployFeeHook;
+        bool deployProcessAccountingGuardHook;
+        FeeHookConfig feeHook;
+        ProcessAccountingGuardHookConfig processAccountingGuardHook;
+    }
+
     struct CreatedVault {
         address vault;
         address timelock;
         address wrappedToken;
         address provider;
+        address metaHooks;
+        address pauserHook;
+        address feeHook;
+        address processAccountingGuardHook;
         address withdrawalRequest;
         address withdrawer;
         address bagFactory;
@@ -76,14 +99,19 @@ interface IVaultFactory {
     error UnknownDeployment(bytes32 deploymentId);
     error Unauthorized();
     error ZeroAddress();
+    error InvalidHooksConfig();
 
-    function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
-        external
-        returns (CreatedVault memory created);
+    function createVault(
+        VaultParams calldata params,
+        FlexStrategyParams calldata flexParams,
+        HooksConfig calldata hooksConfig
+    ) external returns (CreatedVault memory created);
 
-    function startCreateVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
-        external
-        returns (bytes32 deploymentId, CreatedVault memory created);
+    function startCreateVault(
+        VaultParams calldata params,
+        FlexStrategyParams calldata flexParams,
+        HooksConfig calldata hooksConfig
+    ) external returns (bytes32 deploymentId, CreatedVault memory created);
 
     function resumeCreateVault(bytes32 deploymentId) external returns (CreatedVault memory created);
 

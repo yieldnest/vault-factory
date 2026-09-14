@@ -5,8 +5,4 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 
 contract UninitializedTransparentUpgradeableProxy is TransparentUpgradeableProxy {
     constructor(address logic, address initialOwner) TransparentUpgradeableProxy(logic, initialOwner, "") {}
-
-    function _unsafeAllowUninitialized() internal pure override returns (bool) {
-        return true;
-    }
 }

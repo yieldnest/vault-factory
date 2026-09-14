@@ -17,6 +17,57 @@ import {FixedRateProvider} from "src/provider/FixedRateProvider.sol";
 import {FlexProvider} from "src/provider/FlexProvider.sol";
 import {IVault as IVaultTypes} from "src/interfaces/external/IVault.sol";
 
+interface IHookConfigView {
+    struct Config {
+        bool beforeDeposit;
+        bool afterDeposit;
+        bool beforeMint;
+        bool afterMint;
+        bool beforeRedeem;
+        bool afterRedeem;
+        bool beforeWithdraw;
+        bool afterWithdraw;
+        bool beforeProcessAccounting;
+        bool afterProcessAccounting;
+    }
+
+    function getConfig() external view returns (Config memory);
+}
+
+interface IMetaHooksView is IHookConfigView {
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
+    function HOOK_MANAGER_ROLE() external view returns (bytes32);
+    function VAULT() external view returns (address);
+    function hasRole(bytes32 role, address account) external view returns (bool);
+    function hooks(uint256 index) external view returns (address);
+    function hooksLength() external view returns (uint256);
+}
+
+interface IPauserHookView is IHookConfigView {
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
+    function PAUSER_ROLE() external view returns (bytes32);
+    function UNPAUSER_ROLE() external view returns (bytes32);
+    function VAULT() external view returns (address);
+    function hasRole(bytes32 role, address account) external view returns (bool);
+    function paused(uint8 hookCall) external view returns (bool);
+}
+
+interface IFeeHookView is IHookConfigView {
+    function VAULT() external view returns (address);
+    function owner() external view returns (address);
+    function performanceFee() external view returns (uint256);
+    function performanceFeeRecipient() external view returns (address);
+}
+
+interface IProcessAccountingGuardHookView is IHookConfigView {
+    function VAULT() external view returns (address);
+    function owner() external view returns (address);
+    function maxTotalAssetsDecreaseRatio() external view returns (uint256);
+    function maxTotalAssetsIncreaseRatio() external view returns (uint256);
+    function maxTotalSupplyIncreaseRatio() external view returns (uint256);
+    function expectedPerformanceFee() external view returns (uint256);
+}
+
 interface IProxyAdminOwner {
     function owner() external view returns (address);
 }
@@ -140,7 +191,8 @@ contract MockReentrantToken {
         returns (IVaultFactory.CreatedVault memory created)
     {
         IVaultFactory.FlexStrategyParams memory flexParams;
-        (deploymentId,) = factory.startCreateVault(params, flexParams);
+        IVaultFactory.HooksConfig memory hooksConfig;
+        (deploymentId,) = factory.startCreateVault(params, flexParams, hooksConfig);
         allowance[address(this)][address(factory)] = params.bootstrapAmount;
         shouldReenter = true;
         created = factory.resumeCreateVault(deploymentId);
@@ -205,6 +257,7 @@ contract MockVault {
     uint256 public defaultAssetIndex;
     uint256 public totalSupply;
     uint256 public processAccountingCalls;
+    address public hooks;
 
     modifier onlyRole(bytes32 role) {
         require(hasRole[role][msg.sender], "role");
@@ -291,6 +344,10 @@ contract MockVault {
 
     function processAccounting() external {
         processAccountingCalls++;
+    }
+
+    function setHooks(address hooks_) external onlyRole(HOOKS_MANAGER_ROLE) {
+        hooks = hooks_;
     }
 }
 
@@ -801,7 +858,8 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
-        IVaultFactory.CreatedVault memory created = factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created =
+            factory.createVault(_vaultParams(1 ether), _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         assertEq(created.safeGuard, address(0));
@@ -920,7 +978,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 1e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         assertTrue(created.wrappedToken != address(0));
@@ -957,7 +1015,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         assertEq(MockVault(created.vault).processAccountingCalls(), 1);
@@ -974,7 +1032,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 2e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams, _emptyHooksConfig());
         vm.stopPrank();
 
         assertEq(MockVault(created.vault).processAccountingCalls(), 1);
@@ -996,7 +1054,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 2e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams, _emptyHooksConfig());
         vm.stopPrank();
 
         assertEq(MockVault(created.vault).processAccountingCalls(), 0);
@@ -1004,6 +1062,76 @@ contract VaultFactoryTest is Test {
         assertEq(strategy.processAccountingCalls(), 1);
         assertEq(strategy.shareBalance(created.vault), 0);
         assertEq(strategy.shareBalance(bootstrapReceiver), 1e6);
+    }
+
+    function testCreateVaultDeploysConfiguredMainVaultHooks() public {
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        params.alwaysComputeTotalAssets = false;
+        IVaultFactory.HooksConfig memory hooksConfig = _hooksConfig();
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams(), hooksConfig);
+        vm.stopPrank();
+
+        assertEq(MockVault(created.vault).hooks(), created.metaHooks);
+        assertGt(created.metaHooks.code.length, 0);
+        assertGt(created.pauserHook.code.length, 0);
+        assertGt(created.feeHook.code.length, 0);
+        assertGt(created.processAccountingGuardHook.code.length, 0);
+
+        IMetaHooksView metaHooks = IMetaHooksView(created.metaHooks);
+        assertEq(metaHooks.VAULT(), created.vault);
+        assertEq(metaHooks.hooksLength(), 3);
+        assertEq(metaHooks.hooks(0), created.pauserHook);
+        assertEq(metaHooks.hooks(1), created.feeHook);
+        assertEq(metaHooks.hooks(2), created.processAccountingGuardHook);
+        assertTrue(metaHooks.hasRole(metaHooks.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(metaHooks.hasRole(metaHooks.HOOK_MANAGER_ROLE(), created.timelock));
+        assertFalse(metaHooks.hasRole(metaHooks.DEFAULT_ADMIN_ROLE(), address(factory)));
+        assertFalse(metaHooks.hasRole(metaHooks.HOOK_MANAGER_ROLE(), address(factory)));
+
+        IPauserHookView pauserHook = IPauserHookView(created.pauserHook);
+        assertEq(pauserHook.VAULT(), created.vault);
+        assertTrue(pauserHook.hasRole(pauserHook.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(pauserHook.hasRole(pauserHook.PAUSER_ROLE(), pauser));
+        assertTrue(pauserHook.hasRole(pauserHook.UNPAUSER_ROLE(), unpauser));
+        for (uint8 hookCall; hookCall < 5; hookCall++) {
+            assertFalse(pauserHook.paused(hookCall));
+        }
+
+        IFeeHookView feeHook = IFeeHookView(created.feeHook);
+        assertEq(feeHook.VAULT(), created.vault);
+        assertEq(feeHook.owner(), created.timelock);
+        assertEq(feeHook.performanceFee(), hooksConfig.feeHook.performanceFee);
+        assertEq(feeHook.performanceFeeRecipient(), created.timelock);
+        _assertFeeHookConfig(feeHook.getConfig());
+
+        IProcessAccountingGuardHookView guard = IProcessAccountingGuardHookView(created.processAccountingGuardHook);
+        assertEq(guard.VAULT(), created.vault);
+        assertEq(guard.owner(), created.timelock);
+        assertEq(
+            guard.maxTotalAssetsDecreaseRatio(), hooksConfig.processAccountingGuardHook.maxTotalAssetsDecreaseRatio
+        );
+        assertEq(
+            guard.maxTotalAssetsIncreaseRatio(), hooksConfig.processAccountingGuardHook.maxTotalAssetsIncreaseRatio
+        );
+        assertEq(
+            guard.maxTotalSupplyIncreaseRatio(), hooksConfig.processAccountingGuardHook.maxTotalSupplyIncreaseRatio
+        );
+        assertEq(guard.expectedPerformanceFee(), hooksConfig.processAccountingGuardHook.expectedPerformanceFee);
+        _assertFeeHookConfig(guard.getConfig());
+    }
+
+    function testCreateVaultRevertsWhenAccountingHooksEnabledWithLiveAccounting() public {
+        IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
+        IVaultFactory.HooksConfig memory hooksConfig = _hooksConfig();
+
+        vm.startPrank(creator);
+        asset.approve(address(factory), 1 ether);
+        vm.expectRevert(IVaultFactory.InvalidHooksConfig.selector);
+        factory.createVault(params, _emptyFlexParams(), hooksConfig);
+        vm.stopPrank();
     }
 
     function testCreateVaultBootstrapsWithNoReturnDataToken() public {
@@ -1015,7 +1143,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdt.approve(address(factory), 1e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         MockVault vault = MockVault(created.vault);
@@ -1030,7 +1158,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         TimelockController timelock = TimelockController(payable(created.timelock));
@@ -1047,7 +1175,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         vm.expectRevert(abi.encodeWithSelector(IVaultFactory.BootstrapSharesMismatch.selector, 0.5 ether, 1 ether));
-        factory.createVault(_vaultParams(1 ether), _emptyFlexParams());
+        factory.createVault(_vaultParams(1 ether), _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1061,7 +1189,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 2e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, _flexParams());
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, _flexParams(), _emptyHooksConfig());
         vm.stopPrank();
 
         MockVault vault = MockVault(created.vault);
@@ -1252,7 +1380,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         (bytes32 deploymentId, IVaultFactory.CreatedVault memory started) =
-            factory.startCreateVault(params, _flexParams());
+            factory.startCreateVault(params, _flexParams(), _emptyHooksConfig());
 
         MockVault startedVault = MockVault(started.vault);
         assertTrue(startedVault.paused());
@@ -1284,7 +1412,7 @@ contract VaultFactoryTest is Test {
         IVaultFactory.VaultParams memory params = _vaultParams(1 ether);
 
         vm.prank(creator);
-        (bytes32 deploymentId,) = factory.startCreateVault(params, _emptyFlexParams());
+        (bytes32 deploymentId,) = factory.startCreateVault(params, _emptyFlexParams(), _emptyHooksConfig());
 
         vm.prank(address(0xBAD));
         vm.expectRevert(IVaultFactory.Unauthorized.selector);
@@ -1316,7 +1444,7 @@ contract VaultFactoryTest is Test {
 
         vm.startPrank(creator);
         usdc.approve(address(factory), 2e6);
-        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams);
+        IVaultFactory.CreatedVault memory created = factory.createVault(params, flexParams, _emptyHooksConfig());
         vm.stopPrank();
 
         assertEq(created.rewardsSweeper, address(0));
@@ -1334,7 +1462,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         vm.expectRevert(IVaultFactory.ZeroAddress.selector);
-        factory.createVault(_vaultParams(1 ether), flexParams);
+        factory.createVault(_vaultParams(1 ether), flexParams, _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1345,7 +1473,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 1 ether);
         vm.expectRevert(IVaultFactory.ZeroAddress.selector);
-        factory.createVault(_vaultParams(1 ether), flexParams);
+        factory.createVault(_vaultParams(1 ether), flexParams, _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1356,7 +1484,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(factory), 2 ether);
         vm.expectRevert(IVaultFactory.ZeroAddress.selector);
-        factory.createVault(_vaultParams(1 ether), flexParams);
+        factory.createVault(_vaultParams(1 ether), flexParams, _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1369,7 +1497,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         asset.approve(address(emptyRegistryFactory), 1 ether);
         vm.expectRevert(abi.encodeWithSelector(IVaultFactory.MissingRegistryValue.selector, RegistryKeys.VAULT));
-        emptyRegistryFactory.createVault(_vaultParams(1 ether), _emptyFlexParams());
+        emptyRegistryFactory.createVault(_vaultParams(1 ether), _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1410,7 +1538,7 @@ contract VaultFactoryTest is Test {
         vm.startPrank(creator);
         usdc.approve(address(factory), 1e6);
         vm.expectRevert(abi.encodeWithSelector(IVaultFactory.BootstrapAmountTooLow.selector, 1e6 - 1, 1e6));
-        factory.createVault(params, _emptyFlexParams());
+        factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1424,7 +1552,7 @@ contract VaultFactoryTest is Test {
         baseAsset.mint(creator, 10 ether);
         baseAsset.approve(address(factory), 10 ether);
         vm.expectRevert(abi.encodeWithSelector(IVaultFactory.AssetDecimalsTooHigh.selector, 19));
-        factory.createVault(params, _emptyFlexParams());
+        factory.createVault(params, _emptyFlexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -1460,6 +1588,36 @@ contract VaultFactoryTest is Test {
 
     function _emptyFlexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory flexParams) {
         flexParams.deployStrategy = false;
+    }
+
+    function _emptyHooksConfig() internal pure returns (IVaultFactory.HooksConfig memory hooksConfig) {}
+
+    function _hooksConfig() internal pure returns (IVaultFactory.HooksConfig memory) {
+        return IVaultFactory.HooksConfig({
+            deployPauserHook: true,
+            deployFeeHook: true,
+            deployProcessAccountingGuardHook: true,
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: 0.1e18}),
+            processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
+                    maxTotalAssetsDecreaseRatio: 0.2e18,
+                    maxTotalAssetsIncreaseRatio: 0.3e18,
+                    maxTotalSupplyIncreaseRatio: 0.4e18,
+                    expectedPerformanceFee: 0.1e18
+                })
+        });
+    }
+
+    function _assertFeeHookConfig(IHookConfigView.Config memory config) internal pure {
+        assertFalse(config.beforeDeposit);
+        assertFalse(config.afterDeposit);
+        assertFalse(config.beforeMint);
+        assertFalse(config.afterMint);
+        assertFalse(config.beforeRedeem);
+        assertFalse(config.afterRedeem);
+        assertFalse(config.beforeWithdraw);
+        assertFalse(config.afterWithdraw);
+        assertFalse(config.beforeProcessAccounting);
+        assertTrue(config.afterProcessAccounting);
     }
 
     function _flexParams() internal pure returns (IVaultFactory.FlexStrategyParams memory) {

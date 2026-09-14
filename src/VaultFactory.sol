@@ -9,12 +9,13 @@ import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
-import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
+import {AssetDeployer} from "src/lib/AssetDeployer.sol";
 import {FlexStrategyDeployer} from "src/lib/FlexStrategyDeployer.sol";
 import {IFlexStrategy} from "src/interfaces/external/IFlexStrategy.sol";
 import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {SafeGuardDeployer} from "src/lib/SafeGuardDeployer.sol";
 import {TimelockDeployer} from "src/lib/TimelockDeployer.sol";
+import {VaultHooksDeployer} from "src/lib/VaultHooksDeployer.sol";
 import {WithdrawalSystemDeployer} from "src/lib/WithdrawalSystemDeployer.sol";
 import {UninitializedTransparentUpgradeableProxy} from "src/proxy/UninitializedTransparentUpgradeableProxy.sol";
 import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
@@ -43,19 +44,13 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     bytes32 internal constant FEE_MANAGER_ROLE = keccak256("FEE_MANAGER_ROLE");
     bytes32 internal constant ASSET_WITHDRAWER_ROLE = keccak256("ASSET_WITHDRAWER_ROLE");
 
-    struct Assets {
-        address effectiveBaseAsset;
-        address defaultAsset;
-        uint256 defaultAssetIndex;
-        address wrappedToken;
-    }
-
     struct PendingDeployment {
         address creator;
         VaultParams vaultParams;
         FlexStrategyParams flexParams;
+        HooksConfig hooksConfig;
         CreatedVault created;
-        Assets assets;
+        AssetDeployer.Assets assets;
     }
 
     IRegistry public immutable REGISTRY;
@@ -70,39 +65,42 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
 
     /// VAULT CREATION ///
 
-    function createVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
-        external
-        nonReentrant
-        returns (CreatedVault memory created)
-    {
-        (bytes32 deploymentId,) = _startCreateVault(msg.sender, params, flexParams);
+    function createVault(
+        VaultParams calldata params,
+        FlexStrategyParams calldata flexParams,
+        HooksConfig calldata hooksConfig
+    ) external nonReentrant returns (CreatedVault memory created) {
+        (bytes32 deploymentId,) = _startCreateVault(msg.sender, params, flexParams, hooksConfig);
         created = _resumeCreateVault(deploymentId, msg.sender);
     }
 
-    function startCreateVault(VaultParams calldata params, FlexStrategyParams calldata flexParams)
-        external
-        nonReentrant
-        returns (bytes32 deploymentId, CreatedVault memory created)
-    {
-        return _startCreateVault(msg.sender, params, flexParams);
+    function startCreateVault(
+        VaultParams calldata params,
+        FlexStrategyParams calldata flexParams,
+        HooksConfig calldata hooksConfig
+    ) external nonReentrant returns (bytes32 deploymentId, CreatedVault memory created) {
+        return _startCreateVault(msg.sender, params, flexParams, hooksConfig);
     }
 
     function resumeCreateVault(bytes32 deploymentId) external nonReentrant returns (CreatedVault memory created) {
         return _resumeCreateVault(deploymentId, msg.sender);
     }
 
-    function _startCreateVault(address creator, VaultParams calldata params, FlexStrategyParams calldata flexParams)
-        internal
-        returns (bytes32 deploymentId, CreatedVault memory created)
-    {
+    function _startCreateVault(
+        address creator,
+        VaultParams calldata params,
+        FlexStrategyParams calldata flexParams,
+        HooksConfig calldata hooksConfig
+    ) internal returns (bytes32 deploymentId, CreatedVault memory created) {
         _validateVaultParams(params);
+        _validateHooksConfig(params, hooksConfig);
         if (flexParams.deployStrategy) {
             _validateFlexParams(flexParams);
         }
 
         TimelockController timelock = TimelockDeployer.deploy(params.admin, params.proposer, params.timelockDuration);
         address vaultLogic = _registryValue(RegistryKeys.VAULT);
-        Assets memory assets = _prepareAssets(params, address(timelock));
+        AssetDeployer.Assets memory assets = AssetDeployer.prepare(REGISTRY, params.baseAsset, address(timelock));
 
         created.timelock = address(timelock);
         created.wrappedToken = assets.wrappedToken;
@@ -131,6 +129,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         pending.creator = creator;
         pending.vaultParams = params;
         pending.flexParams = flexParams;
+        pending.hooksConfig = hooksConfig;
         pending.created = created;
         pending.assets = assets;
 
@@ -144,7 +143,8 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
 
         VaultParams memory params = pending.vaultParams;
         FlexStrategyParams memory flexParams = pending.flexParams;
-        Assets memory assets = pending.assets;
+        HooksConfig memory hooksConfig = pending.hooksConfig;
+        AssetDeployer.Assets memory assets = pending.assets;
         created = pending.created;
 
         IVault vault = IVault(created.vault);
@@ -196,6 +196,13 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
             vault.processAccounting();
         }
 
+        VaultHooksDeployer.DeployedHooks memory hooks =
+            VaultHooksDeployer.deploy(created.vault, created.timelock, params.pauser, params.unpauser, hooksConfig);
+        created.metaHooks = hooks.metaHooks;
+        created.pauserHook = hooks.pauserHook;
+        created.feeHook = hooks.feeHook;
+        created.processAccountingGuardHook = hooks.processAccountingGuardHook;
+
         _renounceTemporaryRoles(vault);
 
         delete pendingDeployments[deploymentId];
@@ -229,38 +236,16 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         }
     }
 
-    function _prepareAssets(VaultParams memory params, address timelock) internal returns (Assets memory assets) {
-        uint8 baseAssetDecimals = IERC20Metadata(params.baseAsset).decimals();
-        assets.defaultAsset = params.baseAsset;
-
-        if (baseAssetDecimals == VAULT_DECIMALS) {
-            assets.effectiveBaseAsset = params.baseAsset;
-        } else {
-            assets.wrappedToken = _deployWrappedToken(params.baseAsset, baseAssetDecimals, timelock);
-            assets.effectiveBaseAsset = assets.wrappedToken;
+    function _validateHooksConfig(VaultParams calldata params, HooksConfig calldata hooksConfig) internal pure {
+        if (
+            params.alwaysComputeTotalAssets
+                && (hooksConfig.deployFeeHook || hooksConfig.deployProcessAccountingGuardHook)
+        ) {
+            revert InvalidHooksConfig();
         }
-
-        assets.defaultAssetIndex = assets.effectiveBaseAsset == assets.defaultAsset ? 0 : 1;
     }
 
-    function _deployWrappedToken(address underlying, uint8 underlyingDecimals, address timelock)
-        internal
-        returns (address wrappedToken)
-    {
-        wrappedToken = address(
-            new UninitializedTransparentUpgradeableProxy(_registryValue(RegistryKeys.WRAPPED_TOKEN), timelock)
-        );
-        IWrappedToken(wrappedToken)
-            .initialize(
-                IERC20(underlying),
-                _wrappedTokenName(underlying),
-                _wrappedTokenSymbol(underlying),
-                VAULT_DECIMALS,
-                VAULT_DECIMALS - underlyingDecimals
-            );
-    }
-
-    function _initializeVault(IVault vault, VaultParams memory params, Assets memory assets) internal {
+    function _initializeVault(IVault vault, VaultParams memory params, AssetDeployer.Assets memory assets) internal {
         vault.initialize(
             address(this),
             params.tokenName,
@@ -275,7 +260,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
 
     function _configureVault(
         IVault vault,
-        Assets memory assets,
+        AssetDeployer.Assets memory assets,
         VaultParams memory params,
         address provider,
         address timelock
@@ -363,7 +348,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         address timelock,
         VaultParams memory params,
         FlexStrategyParams memory flexParams,
-        Assets memory assets
+        AssetDeployer.Assets memory assets
     ) internal view returns (FlexStrategyDeployer.Config memory cfg) {
         cfg.vault = vault;
         cfg.effectiveBaseAsset = assets.effectiveBaseAsset;
@@ -472,14 +457,6 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     function _registryValue(bytes32 key) internal view returns (address value) {
         value = REGISTRY.valueOf(key);
         if (value == address(0)) revert MissingRegistryValue(key);
-    }
-
-    function _wrappedTokenName(address underlying) internal view returns (string memory) {
-        return string.concat("Wrapped ", IERC20Metadata(underlying).name());
-    }
-
-    function _wrappedTokenSymbol(address underlying) internal view returns (string memory) {
-        return string.concat("W", IERC20Metadata(underlying).symbol());
     }
 
     /// NONCE ///

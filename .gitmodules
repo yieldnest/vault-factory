@@ -17,3 +17,7 @@
 [submodule "lib/safeguard"]
 	path = lib/safeguard
 	url = https://github.com/yieldnest/safeguard
+[submodule "lib/yieldnest-vault-periphery"]
+	path = lib/yieldnest-vault-periphery
+	url = https://github.com/yieldnest/yieldnest-vault-periphery
+	branch = eth-max-vault

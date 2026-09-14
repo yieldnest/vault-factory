@@ -40,7 +40,7 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
 
         vm.startPrank(TestConstants.CREATOR);
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
-        created = factory.createVault(_vaultParams(), _flexParams());
+        created = factory.createVault(_vaultParams(), _flexParams(), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -159,6 +159,8 @@ contract VaultFactoryUpgradeabilityIntegrationTest is Test {
             accountingTokenSymbol: "aFLEX"
         });
     }
+
+    function _emptyHooksConfig() internal pure returns (IVaultFactory.HooksConfig memory hooksConfig) {}
 
     function _timelockUpgradeProxy(address proxy, address newImplementation, string memory label) internal {
         assertTrue(_implementation(proxy) != newImplementation, string.concat(label, " precondition"));

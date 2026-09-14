@@ -24,6 +24,14 @@ contract CreateVault is Script {
     uint256 internal constant TARGET_APY = 0.05e18;
     uint256 internal constant LOWER_BOUND = 0.01e18;
     uint256 internal constant MIN_REWARDABLE_ASSETS = 100e6;
+    bool internal constant DEPLOY_PAUSER_HOOK = false;
+    bool internal constant DEPLOY_FEE_HOOK = false;
+    bool internal constant DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK = false;
+    uint256 internal constant PERFORMANCE_FEE = 0;
+    uint256 internal constant MAX_TOTAL_ASSETS_DECREASE_RATIO = 0;
+    uint256 internal constant MAX_TOTAL_ASSETS_INCREASE_RATIO = 0;
+    uint256 internal constant MAX_TOTAL_SUPPLY_INCREASE_RATIO = 0;
+    uint256 internal constant EXPECTED_PERFORMANCE_FEE = 0;
 
     function run() external returns (IVaultFactory.CreatedVault memory created) {
         address factory = vm.promptAddress("VaultFactory address");
@@ -64,9 +72,11 @@ contract CreateVault is Script {
             accountingTokenSymbol: "aWLFUSDC"
         });
 
+        IVaultFactory.HooksConfig memory hooksConfig = _hooksConfig();
+
         vm.startBroadcast();
         (bytes32 deploymentId, IVaultFactory.CreatedVault memory started) =
-            IVaultFactory(factory).startCreateVault(params, flexParams);
+            IVaultFactory(factory).startCreateVault(params, flexParams, hooksConfig);
         IERC20(USDC).approve(factory, BOOTSTRAP_AMOUNT * 2);
         created = IVaultFactory(factory).resumeCreateVault(deploymentId);
         vm.stopBroadcast();
@@ -77,6 +87,10 @@ contract CreateVault is Script {
         console2.log("Timelock:", created.timelock);
         console2.log("Wrapped token:", created.wrappedToken);
         console2.log("Provider:", created.provider);
+        console2.log("MetaHooks:", created.metaHooks);
+        console2.log("PauserHook:", created.pauserHook);
+        console2.log("FeeHook:", created.feeHook);
+        console2.log("Process accounting guard hook:", created.processAccountingGuardHook);
         console2.log("Withdrawal request:", created.withdrawalRequest);
         console2.log("Withdrawer:", created.withdrawer);
         console2.log("Bag factory:", created.bagFactory);
@@ -96,6 +110,10 @@ contract CreateVault is Script {
         vm.serializeAddress(obj, "wrappedToken", created.wrappedToken);
         vm.serializeAddress(obj, "wrappedTokenProxyAdmin", _proxyAdmin(created.wrappedToken));
         vm.serializeAddress(obj, "provider", created.provider);
+        vm.serializeAddress(obj, "metaHooks", created.metaHooks);
+        vm.serializeAddress(obj, "pauserHook", created.pauserHook);
+        vm.serializeAddress(obj, "feeHook", created.feeHook);
+        vm.serializeAddress(obj, "processAccountingGuardHook", created.processAccountingGuardHook);
         vm.serializeAddress(obj, "withdrawalRequest", created.withdrawalRequest);
         vm.serializeAddress(obj, "withdrawalRequestProxyAdmin", _proxyAdmin(created.withdrawalRequest));
         vm.serializeAddress(obj, "withdrawer", created.withdrawer);
@@ -125,5 +143,20 @@ contract CreateVault is Script {
     function _proxyAdmin(address proxy) internal view returns (address) {
         if (proxy == address(0)) return address(0);
         return address(uint160(uint256(vm.load(proxy, ERC1967_ADMIN_SLOT))));
+    }
+
+    function _hooksConfig() internal pure returns (IVaultFactory.HooksConfig memory) {
+        return IVaultFactory.HooksConfig({
+            deployPauserHook: DEPLOY_PAUSER_HOOK,
+            deployFeeHook: DEPLOY_FEE_HOOK,
+            deployProcessAccountingGuardHook: DEPLOY_PROCESS_ACCOUNTING_GUARD_HOOK,
+            feeHook: IVaultFactory.FeeHookConfig({performanceFee: PERFORMANCE_FEE}),
+            processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
+                maxTotalAssetsDecreaseRatio: MAX_TOTAL_ASSETS_DECREASE_RATIO,
+                maxTotalAssetsIncreaseRatio: MAX_TOTAL_ASSETS_INCREASE_RATIO,
+                maxTotalSupplyIncreaseRatio: MAX_TOTAL_SUPPLY_INCREASE_RATIO,
+                expectedPerformanceFee: EXPECTED_PERFORMANCE_FEE
+            })
+        });
     }
 }

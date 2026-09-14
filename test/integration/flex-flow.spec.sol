@@ -86,7 +86,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
 
         vm.startPrank(TestConstants.CREATOR);
         IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
-        created = factory.createVault(_vaultParams(), _flexParams(address(safe)));
+        created = factory.createVault(_vaultParams(), _flexParams(address(safe)), _emptyHooksConfig());
         vm.stopPrank();
     }
 
@@ -356,7 +356,8 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
                     factory: address(factory),
                     created: created,
                     vaultParams: _vaultParams(),
-                    flexParams: _flexParams(address(safe))
+                    flexParams: _flexParams(address(safe)),
+                    hooksConfig: _emptyHooksConfig()
                 })
             ),
             "verification"
@@ -505,4 +506,6 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
             accountingTokenSymbol: "aFLEX"
         });
     }
+
+    function _emptyHooksConfig() internal pure returns (IVaultFactory.HooksConfig memory hooksConfig) {}
 }

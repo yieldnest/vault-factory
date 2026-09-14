@@ -48,6 +48,7 @@ interface IVault {
     function addAsset(address asset, bool active) external;
     function setProvider(address provider) external;
     function setBuffer(address buffer) external;
+    function setHooks(address hooks) external;
     function unpause() external;
     function setProcessorRule(address target, bytes4 functionSig, FunctionRule calldata rule) external;
     function processAccounting() external;

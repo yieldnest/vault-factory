@@ -12,6 +12,7 @@ contract VaultVerifier {
         IVaultFactory.CreatedVault created;
         IVaultFactory.VaultParams vaultParams;
         IVaultFactory.FlexStrategyParams flexParams;
+        IVaultFactory.HooksConfig hooksConfig;
     }
 
     error VerificationFailed(string check);
@@ -21,7 +22,8 @@ contract VaultVerifier {
             factory: verification.factory,
             created: verification.created,
             vaultParams: verification.vaultParams,
-            flexParams: verification.flexParams
+            flexParams: verification.flexParams,
+            hooksConfig: verification.hooksConfig
         });
 
         return VaultVerifierLib.verify(vault, libVerification);
