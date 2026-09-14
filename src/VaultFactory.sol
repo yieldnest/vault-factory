@@ -124,6 +124,15 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         _initializeVault(vault, params, assets);
         _configureVault(vault, assets, params, created.provider, address(timelock));
 
+        VaultHooksDeployer.DeployedHooks memory hooks =
+            VaultHooksDeployer.deploy(
+                created.vault, created.timelock, params.admin, params.pauser, params.unpauser, hooksConfig
+            );
+        created.metaHooks = hooks.metaHooks;
+        created.pauserHook = hooks.pauserHook;
+        created.feeHook = hooks.feeHook;
+        created.processAccountingGuardHook = hooks.processAccountingGuardHook;
+
         deploymentId = keccak256(abi.encode(block.chainid, address(this), creator, created.vault));
         PendingDeployment storage pending = pendingDeployments[deploymentId];
         pending.creator = creator;
@@ -143,7 +152,6 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
 
         VaultParams memory params = pending.vaultParams;
         FlexStrategyParams memory flexParams = pending.flexParams;
-        HooksConfig memory hooksConfig = pending.hooksConfig;
         AssetDeployer.Assets memory assets = pending.assets;
         created = pending.created;
 
@@ -196,14 +204,6 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
             vault.processAccounting();
         }
 
-        VaultHooksDeployer.DeployedHooks memory hooks =
-            VaultHooksDeployer.deploy(
-                created.vault, created.timelock, params.admin, params.pauser, params.unpauser, hooksConfig
-            );
-        created.metaHooks = hooks.metaHooks;
-        created.pauserHook = hooks.pauserHook;
-        created.feeHook = hooks.feeHook;
-        created.processAccountingGuardHook = hooks.processAccountingGuardHook;
         if (created.metaHooks != address(0)) {
             vault.setHooks(created.metaHooks);
         }
