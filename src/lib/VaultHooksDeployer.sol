@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {IHooks} from "lib/yieldnest-vault/src/interface/IHooks.sol";
 import {MetaHooks} from "lib/yieldnest-vault-periphery/src/hooks/MetaHooks.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IVault} from "src/interfaces/external/IVault.sol";
 import {FeeHookDeployer} from "src/lib/FeeHookDeployer.sol";
 import {PauserHookDeployer} from "src/lib/PauserHookDeployer.sol";
 import {ProcessAccountingGuardHookDeployer} from "src/lib/ProcessAccountingGuardHookDeployer.sol";
@@ -57,7 +56,6 @@ library VaultHooksDeployer {
         metaHooks.renounceRole(DEFAULT_ADMIN_ROLE, address(this));
 
         deployed.metaHooks = address(metaHooks);
-        IVault(vault).setHooks(deployed.metaHooks);
     }
 
     function _hookCount(IVaultFactory.HooksConfig memory config) internal pure returns (uint256 count) {

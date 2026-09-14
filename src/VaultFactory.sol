@@ -202,6 +202,9 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         created.pauserHook = hooks.pauserHook;
         created.feeHook = hooks.feeHook;
         created.processAccountingGuardHook = hooks.processAccountingGuardHook;
+        if (created.metaHooks != address(0)) {
+            vault.setHooks(created.metaHooks);
+        }
 
         _renounceTemporaryRoles(vault);
 
