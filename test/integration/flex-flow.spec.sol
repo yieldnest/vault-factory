@@ -91,20 +91,12 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
     }
 
     function test_Flex_Bootstrap_Conversion_Rates() public view {
-        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), BOOTSTRAP_AMOUNT, "vault convert assets");
-        assertEq(IVaultFlow(created.vault).convertToShares(BOOTSTRAP_AMOUNT), 1e18, "vault convert shares");
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault convert assets");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault convert shares");
         assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), 0, "vault has no strategy shares");
 
-        assertEq(
-            IVaultFlow(created.flexStrategy).convertToAssets(BOOTSTRAP_AMOUNT),
-            BOOTSTRAP_AMOUNT,
-            "strategy convert assets"
-        );
-        assertEq(
-            IVaultFlow(created.flexStrategy).convertToShares(BOOTSTRAP_AMOUNT),
-            BOOTSTRAP_AMOUNT,
-            "strategy convert shares"
-        );
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy convert assets");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy convert shares");
     }
 
     function testFuzz_Flex_Deposit_Processor_Move_And_Guarded_OffRamp(uint256 depositAmount) public {
