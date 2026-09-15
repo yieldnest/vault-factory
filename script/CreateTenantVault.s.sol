@@ -17,7 +17,7 @@ contract CreateTenantVault is CreateVault {
     /// @notice Ethereum mainnet USDC, used as both base and default asset.
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant OFF_RAMP = 0xB09B3D0F9a0105cCe9e63D3D7217CD1411Cc5BE9;
-    address internal constant FEE_RECIPIENT = 0x0e46F77dbe0b6e9782bDe5596cdAb025C222cC5d;
+    address internal constant FEE_RECIPIENT = 0x684Fa1158D1f1430A5EeA429e3A81eB7a18813D5;
 
     uint256 internal constant TIMELOCK_DURATION = 1 days;
     // 0.1 USDC expressed in 18-decimal vault shares, the unit the request policy locks.
