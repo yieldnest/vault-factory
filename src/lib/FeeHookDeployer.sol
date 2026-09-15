@@ -5,11 +5,11 @@ import {IHooks} from "lib/yieldnest-vault/src/interface/IHooks.sol";
 import {FeeHooks} from "lib/yieldnest-vault/src/hooks/FeeHooks.sol";
 
 library FeeHookDeployer {
-    function deploy(address vault, address timelock, uint256 performanceFee, address feeRecipient)
+    function deploy(address vault, address owner, uint256 performanceFee, address feeRecipient)
         external
         returns (address)
     {
-        return address(new FeeHooks(vault, timelock, performanceFee, feeRecipient, _config()));
+        return address(new FeeHooks(vault, owner, performanceFee, feeRecipient, _config()));
     }
 
     function _config() private pure returns (IHooks.Config memory) {

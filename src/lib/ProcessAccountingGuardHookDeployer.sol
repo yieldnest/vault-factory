@@ -5,14 +5,14 @@ import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {ProcessAccountingGuardHook} from "lib/yieldnest-vault-periphery/src/hooks/ProcessAccountingGuardHook.sol";
 
 library ProcessAccountingGuardHookDeployer {
-    function deploy(address vault, address timelock, IVaultFactory.ProcessAccountingGuardHookConfig memory config)
+    function deploy(address vault, address owner, IVaultFactory.ProcessAccountingGuardHookConfig memory config)
         external
         returns (address)
     {
         return address(
             new ProcessAccountingGuardHook(
                 vault,
-                timelock,
+                owner,
                 config.maxTotalAssetsDecreaseRatio,
                 config.maxTotalAssetsIncreaseRatio,
                 config.maxTotalSupplyIncreaseRatio,
