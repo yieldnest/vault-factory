@@ -90,4 +90,8 @@ contract CreateTenantVault is CreateVault {
             })
         });
     }
+
+    function _deploymentName() internal pure override returns (string memory) {
+        return "abdy-vault";
+    }
 }
