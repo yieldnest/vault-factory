@@ -177,6 +177,7 @@ library FlexStrategyDeployer {
 
         // Final roles: actors for operations, the vault timelock for everything critical.
         strategy.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
+        strategy.grantRole(DEFAULT_ADMIN_ROLE, cfg.admin);
         strategy.grantRole(PROCESSOR_ROLE, cfg.processor);
         strategy.grantRole(PAUSER_ROLE, cfg.pauser);
         strategy.grantRole(UNPAUSER_ROLE, cfg.unpauser);
@@ -217,10 +218,12 @@ library FlexStrategyDeployer {
         IAccountingToken accountingToken = IAccountingToken(sys.accountingToken);
         accountingToken.setAccountingModule(sys.accountingModule);
         accountingToken.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
+        accountingToken.grantRole(DEFAULT_ADMIN_ROLE, cfg.admin);
         accountingToken.grantRole(ACCOUNTING_MODULE_MANAGER_ROLE, cfg.timelock);
 
         IAccountingModule accountingModule = IAccountingModule(sys.accountingModule);
         accountingModule.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
+        accountingModule.grantRole(DEFAULT_ADMIN_ROLE, cfg.admin);
         accountingModule.grantRole(SAFE_MANAGER_ROLE, cfg.timelock);
         accountingModule.grantRole(REWARDS_PROCESSOR_ROLE, cfg.accountingProcessor);
         accountingModule.grantRole(LOSS_PROCESSOR_ROLE, cfg.lossProcessor);
@@ -230,6 +233,7 @@ library FlexStrategyDeployer {
 
             IRewardsSweeper rewardsSweeper = IRewardsSweeper(sys.rewardsSweeper);
             rewardsSweeper.grantRole(DEFAULT_ADMIN_ROLE, cfg.timelock);
+            rewardsSweeper.grantRole(DEFAULT_ADMIN_ROLE, cfg.admin);
             rewardsSweeper.grantRole(ACCOUNTING_MODULE_MANAGER_ROLE, cfg.timelock);
             rewardsSweeper.grantRole(REWARDS_SWEEPER_ROLE, cfg.processor);
             rewardsSweeper.grantRole(SNAPSHOT_REWARDS_SWEEPER_ROLE, cfg.processor);

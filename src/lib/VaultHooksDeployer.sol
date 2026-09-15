@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IHooks} from "lib/yieldnest-vault/src/interface/IHooks.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {MetaHooks} from "lib/yieldnest-vault-periphery/src/hooks/MetaHooks.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
 import {FeeHookDeployer} from "src/lib/FeeHookDeployer.sol";
@@ -37,7 +38,10 @@ library VaultHooksDeployer {
         uint256 index;
 
         if (config.deployPauserHook) {
-            deployed.pauserHook = PauserHookDeployer.deploy(deployed.metaHooks, timelock, pauser, unpauser);
+            deployed.pauserHook = PauserHookDeployer.deploy(deployed.metaHooks, address(this), pauser, unpauser);
+            IAccessControl(deployed.pauserHook).grantRole(DEFAULT_ADMIN_ROLE, admin);
+            IAccessControl(deployed.pauserHook).grantRole(DEFAULT_ADMIN_ROLE, timelock);
+            IAccessControl(deployed.pauserHook).renounceRole(DEFAULT_ADMIN_ROLE, address(this));
             hooks[index++] = IHooks(deployed.pauserHook);
         }
 
@@ -57,6 +61,7 @@ library VaultHooksDeployer {
 
         metaHooks.setHooks(hooks);
         metaHooks.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        metaHooks.grantRole(DEFAULT_ADMIN_ROLE, admin);
         metaHooks.grantRole(HOOK_MANAGER_ROLE, timelock);
         metaHooks.renounceRole(HOOK_MANAGER_ROLE, address(this));
         metaHooks.renounceRole(DEFAULT_ADMIN_ROLE, address(this));

@@ -22,6 +22,7 @@ library SafeGuardVerifierLib {
         _verify(created.safeGuard.code.length != 0, "safeguard code");
         _verifyString(safeGuard.name(), string.concat(flexParams.strategyName, " Safeguard"), "safeguard name");
         _verifyRole(safeGuard, DEFAULT_ADMIN_ROLE, created.timelock, true, "safeguard admin");
+        _verifyRole(safeGuard, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "safeguard external admin");
         _verifyRole(safeGuard, PROCESSOR_MANAGER_ROLE, created.timelock, true, "safeguard processor manager");
         _verifyRole(safeGuard, GUARD_ADMIN_ROLE, created.timelock, true, "safeguard guard admin");
         _verifyRole(safeGuard, DEFAULT_ADMIN_ROLE, factory, false, "safeguard dangling admin");

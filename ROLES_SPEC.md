@@ -27,6 +27,8 @@ The ADMIN holds these roles on the `TimelockController`:
 
 The ADMIN is a supervisory multisig that can also schedule and execute timelocked operations.
 
+The ADMIN also receives `DEFAULT_ADMIN_ROLE` on role-based deployment components wherever that role is granted to the deployment timelock.
+
 The ADMIN can cancel a pending proposal through `CANCELLER_ROLE`.
 
 The ADMIN can revoke the PROPOSER multisig's `PROPOSER_ROLE` or `EXECUTOR_ROLE` through `DEFAULT_ADMIN_ROLE`.
@@ -99,6 +101,8 @@ The timelock holds:
 
 The timelock does not hold the operational roles on the Main Vault.
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the Main Vault.
+
 The ADMIN multisig also holds `PAUSER_ROLE` and `UNPAUSER_ROLE` on the Main Vault as a supervisory incident-control path.
 
 ### Main Vault ProxyAdmin
@@ -118,9 +122,13 @@ For `MetaHooks`, the timelock holds:
 - `DEFAULT_ADMIN_ROLE`
 - `HOOK_MANAGER_ROLE`
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on `MetaHooks`.
+
 For `PauserHook`, the timelock holds:
 
 - `DEFAULT_ADMIN_ROLE`
+
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on `PauserHook`.
 
 For `FeeHooks`, `ADMIN` is the owner. The configured fee recipient receives minted performance-fee shares.
 
@@ -134,6 +142,8 @@ The timelock holds:
 - `CONFIGURATION_MANAGER_ROLE`
 
 The timelock is the owner of the WithdrawalRequest `ProxyAdmin`.
+
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the WithdrawalRequest.
 
 The ADMIN multisig also holds `PAUSER_ROLE` on the WithdrawalRequest. The WithdrawalRequest uses a single `PAUSER_ROLE` for both pause and unpause behavior.
 
@@ -150,6 +160,8 @@ The timelock holds:
 
 The timelock is the owner of the BeaconProxyFactory `ProxyAdmin`.
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the BeaconProxyFactory.
+
 ### FlexStrategy
 
 When a FlexStrategy is deployed, the timelock holds:
@@ -165,6 +177,8 @@ When a FlexStrategy is deployed, the timelock holds:
 
 The timelock is the owner of the FlexStrategy `ProxyAdmin`.
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the FlexStrategy.
+
 The ADMIN multisig also holds `PAUSER_ROLE` and `UNPAUSER_ROLE` on the FlexStrategy as a supervisory incident-control path.
 
 ### AccountingToken
@@ -176,6 +190,8 @@ When an AccountingToken is deployed, the timelock holds:
 
 The timelock is the owner of the AccountingToken `ProxyAdmin`.
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the AccountingToken.
+
 ### AccountingModule
 
 When an AccountingModule is deployed, the timelock holds:
@@ -184,6 +200,8 @@ When an AccountingModule is deployed, the timelock holds:
 - `SAFE_MANAGER_ROLE`
 
 The timelock is the owner of the AccountingModule `ProxyAdmin`.
+
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the AccountingModule.
 
 ### RewardsSweeper
 
@@ -194,6 +212,8 @@ When a RewardsSweeper is deployed, the timelock holds:
 
 The timelock is the owner of the RewardsSweeper `ProxyAdmin`.
 
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the RewardsSweeper.
+
 ### SafeGuard
 
 When a SafeGuard is deployed, the timelock holds:
@@ -203,6 +223,8 @@ When a SafeGuard is deployed, the timelock holds:
 - `GUARD_ADMIN_ROLE`
 
 The timelock is the owner of the SafeGuard `ProxyAdmin`.
+
+The ADMIN multisig also holds `DEFAULT_ADMIN_ROLE` on the SafeGuard.
 
 ## OPS multisig
 

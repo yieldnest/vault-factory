@@ -40,6 +40,7 @@ library HooksVerifierLib {
         _verify(metaHooks.VAULT() == created.vault, "meta hooks vault");
         _verify(metaHooks.hooksLength() == hookCount, "meta hooks length");
         _verifyRole(metaHooks, DEFAULT_ADMIN_ROLE, created.timelock, true, "meta hooks admin");
+        _verifyRole(metaHooks, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "meta hooks external admin");
         _verifyRole(metaHooks, HOOK_MANAGER_ROLE, created.timelock, true, "meta hooks manager");
         _verifyRole(metaHooks, DEFAULT_ADMIN_ROLE, factory, false, "meta hooks dangling admin");
         _verifyRole(metaHooks, HOOK_MANAGER_ROLE, factory, false, "meta hooks dangling manager");
@@ -51,6 +52,7 @@ library HooksVerifierLib {
             _verify(created.pauserHook.code.length != 0, "pauser hook code");
             _verify(pauserHook.VAULT() == created.metaHooks, "pauser hook vault");
             _verifyRole(pauserHook, DEFAULT_ADMIN_ROLE, created.timelock, true, "pauser hook admin");
+            _verifyRole(pauserHook, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "pauser hook external admin");
             _verifyRole(pauserHook, PAUSER_ROLE, vaultParams.pauser, true, "pauser hook pauser");
             _verifyRole(pauserHook, UNPAUSER_ROLE, vaultParams.unpauser, true, "pauser hook unpauser");
         } else {

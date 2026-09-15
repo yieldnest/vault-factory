@@ -113,6 +113,7 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
                 SafeGuardDeployer.Config({
                     safeGuardLogic: _registryValue(RegistryKeys.SAFE_GUARD),
                     timelock: address(timelock),
+                    admin: params.admin,
                     baseAsset: params.baseAsset,
                     offRampAddress: flexParams.offRampAddress,
                     strategyName: flexParams.strategyName
@@ -124,10 +125,9 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
         _initializeVault(vault, params, assets);
         _configureVault(vault, assets, params, created.provider, address(timelock));
 
-        VaultHooksDeployer.DeployedHooks memory hooks =
-            VaultHooksDeployer.deploy(
-                created.vault, created.timelock, params.admin, params.pauser, params.unpauser, hooksConfig
-            );
+        VaultHooksDeployer.DeployedHooks memory hooks = VaultHooksDeployer.deploy(
+            created.vault, created.timelock, params.admin, params.pauser, params.unpauser, hooksConfig
+        );
         created.metaHooks = hooks.metaHooks;
         created.pauserHook = hooks.pauserHook;
         created.feeHook = hooks.feeHook;
@@ -272,12 +272,8 @@ contract VaultFactory is IVaultFactory, ReentrancyGuard {
     ) internal {
         _grantTemporaryRoles(vault);
 
-        // IMPORTANT: the vault's DEFAULT_ADMIN_ROLE must be held by the timelock and nothing
-        // else. It is the role admin for every vault role, so this is what forces critical role
-        // updates (e.g. granting or revoking PROVIDER_MANAGER_ROLE or ASSET_MANAGER_ROLE) through
-        // a scheduled, delayed timelock operation. Granting it to any other account would let
-        // that account rewire vault roles instantly, bypassing the timelock entirely.
         vault.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        vault.grantRole(DEFAULT_ADMIN_ROLE, params.admin);
         vault.grantRole(PROCESSOR_ROLE, params.processor);
         vault.grantRole(PAUSER_ROLE, params.pauser);
         vault.grantRole(UNPAUSER_ROLE, params.unpauser);

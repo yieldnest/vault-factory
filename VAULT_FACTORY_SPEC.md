@@ -136,7 +136,7 @@ The same timelock is also assigned wherever the deployment has critical protocol
 
 The factory must configure the timelock as the owner or role holder for these critical operations during deployment. Any temporary roles held by the factory or deployer for setup must be renounced or revoked before the deployment is considered complete.
 
-IMPORTANT: the Main Vault's `DEFAULT_ADMIN_ROLE` is assigned to the timelock and nothing else. It is the role admin for every vault role, so this is what makes critical role updates themselves timelocked (e.g. granting or revoking `PROVIDER_MANAGER_ROLE` or `ASSET_MANAGER_ROLE`): they can only happen through a scheduled, delayed timelock operation. Assigning it to any other account would allow instant role changes that bypass the timelock.
+The `admin` address also receives `DEFAULT_ADMIN_ROLE` everywhere the factory grants that role to the deployment timelock. This gives the supervisory ADMIN multisig a direct intervention path for role recovery or emergency governance actions, while the timelock remains the normal delayed control path for manager roles and proxy upgrades.
 
 ### Registry
 
@@ -215,7 +215,7 @@ The WithdrawalRequest, BaseWithdrawer, and BeaconProxyFactory implementations ar
 
 The factory also exposes `deployWithdrawalSystem(vault, timelock, resolver, pauser, minWithdrawalAmount, maxDataLength)` publicly, so a withdrawal system can be deployed standalone for an existing vault. In that case the caller is responsible for granting the returned withdrawer the vault's `ASSET_WITHDRAWER_ROLE`; `createVault` performs that grant itself.
 
-Role assignment: the WithdrawalRequest default admin and configuration manager are the deployment timelock; the bag factory default admin and implementation manager are the deployment timelock; the bag factory creator is the WithdrawalRequest.
+Role assignment: the WithdrawalRequest default admin is both the deployment timelock and `admin`; its configuration manager is the deployment timelock. The bag factory default admin is both the deployment timelock and `admin`; its implementation manager is the deployment timelock, and its creator is the WithdrawalRequest.
 
 Additional vault parameters:
 
@@ -240,7 +240,7 @@ When `deployStrategy` is true, the factory deploys the full flex strategy system
 - **RewardsSweeper** — optional, controlled by the `deployRewardsSweeper` flag. When deployed it is wired to the accounting module and granted `REWARDS_PROCESSOR_ROLE` on it; its implementation is only read from the registry when the flag is set.
 - **FixedRateProvider** — the strategy's rate provider, pricing the base asset and accounting token at par.
 
-Role assignment mirrors the Main Vault policy: every critical role (`DEFAULT_ADMIN_ROLE` and all manager roles, `SAFE_MANAGER_ROLE`) goes to the deployment timelock; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `PAUSER_ROLE` and `UNPAUSER_ROLE` also go to `admin`; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to `lossProcessor`. All temporary factory roles are renounced.
+Role assignment mirrors the Main Vault policy: every critical manager role goes to the deployment timelock; `DEFAULT_ADMIN_ROLE` goes to both the deployment timelock and `admin`; `PROCESSOR_ROLE`, `PAUSER_ROLE`, and `UNPAUSER_ROLE` go to the vault's actor parameters; `PAUSER_ROLE` and `UNPAUSER_ROLE` also go to `admin`; `REWARDS_PROCESSOR_ROLE` goes to `accountingProcessor`; `LOSS_PROCESSOR_ROLE` goes to `lossProcessor`. All temporary factory roles are renounced.
 
 #### Parameters
 

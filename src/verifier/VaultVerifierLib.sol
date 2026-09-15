@@ -173,6 +173,7 @@ library VaultVerifierLib {
         _verify(address(request.requestPolicy()) == created.requestPolicy, "request policy");
         _verify(request.maxDataLength() == params.maxDataLength, "request data length");
         _verifyRole(request, DEFAULT_ADMIN_ROLE, created.timelock, true, "request admin");
+        _verifyRole(request, DEFAULT_ADMIN_ROLE, params.admin, true, "request external admin");
         _verifyRole(request, RESOLVER_ROLE, params.resolver, true, "request resolver");
         _verifyRole(request, CONFIGURATION_MANAGER_ROLE, created.timelock, true, "request config");
         _verifyRole(request, PAUSER_ROLE, params.pauser, true, "request pauser");
@@ -189,6 +190,7 @@ library VaultVerifierLib {
         _verify(created.bagFactory.code.length != 0, "bag factory code");
         _verify(bagFactory.implementation() == registry.valueOf(RegistryKeys.BAG), "bag implementation");
         _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, created.timelock, true, "bag admin");
+        _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, params.admin, true, "bag external admin");
         _verifyRole(bagFactory, CREATOR_ROLE, created.withdrawalRequest, true, "bag creator");
         _verifyRole(bagFactory, IMPLEMENTATION_MANAGER_ROLE, created.timelock, true, "bag implementation manager");
         _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, verification.factory, false, "bag dangling admin");
@@ -237,6 +239,7 @@ library VaultVerifierLib {
         _verify(_decimals(address(accountingToken)) == _decimals(vaultParams.baseAsset), "accounting token decimals");
         _verify(accountingToken.accountingModule() == created.accountingModule, "accounting token module");
         _verifyRole(accountingToken, DEFAULT_ADMIN_ROLE, created.timelock, true, "accounting token admin");
+        _verifyRole(accountingToken, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "accounting token external admin");
         _verifyRole(accountingToken, ACCOUNTING_MODULE_MANAGER_ROLE, created.timelock, true, "accounting token manager");
         _verifyRole(accountingToken, DEFAULT_ADMIN_ROLE, verification.factory, false, "accounting token dangling admin");
         _verifyRole(
@@ -257,6 +260,7 @@ library VaultVerifierLib {
         _verify(accountingModule.lowerBound() == flexParams.lowerBound, "accounting lower bound");
         _verify(accountingModule.cooldownSeconds() == ACCOUNTING_COOLDOWN_SECONDS, "accounting cooldown");
         _verifyRole(accountingModule, DEFAULT_ADMIN_ROLE, created.timelock, true, "accounting module admin");
+        _verifyRole(accountingModule, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "accounting module external admin");
         _verifyRole(accountingModule, SAFE_MANAGER_ROLE, created.timelock, true, "accounting module safe manager");
         _verifyRole(
             accountingModule,
@@ -274,6 +278,7 @@ library VaultVerifierLib {
             IRewardsSweeperView sweeper = IRewardsSweeperView(created.rewardsSweeper);
             _verify(sweeper.accountingModule() == created.accountingModule, "sweeper module");
             _verifyRole(sweeper, DEFAULT_ADMIN_ROLE, created.timelock, true, "sweeper admin");
+            _verifyRole(sweeper, DEFAULT_ADMIN_ROLE, vaultParams.admin, true, "sweeper external admin");
             _verifyRole(sweeper, ACCOUNTING_MODULE_MANAGER_ROLE, created.timelock, true, "sweeper manager");
             _verifyRole(sweeper, REWARDS_SWEEPER_ROLE, vaultParams.processor, true, "sweeper role");
             _verifyRole(sweeper, SNAPSHOT_REWARDS_SWEEPER_ROLE, vaultParams.processor, true, "sweeper snapshot role");
@@ -304,6 +309,7 @@ library VaultVerifierLib {
         address factory = verification.factory;
 
         _verifyRole(vault, DEFAULT_ADMIN_ROLE, created.timelock, true, "vault admin role");
+        _verifyRole(vault, DEFAULT_ADMIN_ROLE, params.admin, true, "vault external admin role");
         _verifyRole(vault, PROCESSOR_ROLE, params.processor, true, "vault processor role");
         _verifyRole(vault, PAUSER_ROLE, params.pauser, true, "vault pauser role");
         _verifyRole(vault, UNPAUSER_ROLE, params.unpauser, true, "vault unpauser role");
@@ -337,6 +343,7 @@ library VaultVerifierLib {
         address factory = verification.factory;
 
         _verifyRole(strategy, DEFAULT_ADMIN_ROLE, created.timelock, true, "strategy admin role");
+        _verifyRole(strategy, DEFAULT_ADMIN_ROLE, params.admin, true, "strategy external admin role");
         _verifyRole(strategy, PROCESSOR_ROLE, params.processor, true, "strategy processor role");
         _verifyRole(strategy, PAUSER_ROLE, params.pauser, true, "strategy pauser role");
         _verifyRole(strategy, UNPAUSER_ROLE, params.unpauser, true, "strategy unpauser role");

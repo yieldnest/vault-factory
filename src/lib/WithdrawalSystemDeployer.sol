@@ -42,7 +42,13 @@ library WithdrawalSystemDeployer {
         withdrawals.bagFactory =
             address(new UninitializedTransparentUpgradeableProxy(cfg.bagFactoryLogic, cfg.timelock));
         IBeaconProxyFactory(withdrawals.bagFactory)
-            .initialize(cfg.bagLogic, cfg.timelock, withdrawals.withdrawalRequest, cfg.timelock);
+            .initialize(cfg.bagLogic, address(this), withdrawals.withdrawalRequest, cfg.timelock);
+        IBeaconProxyFactory(withdrawals.bagFactory)
+            .grantRole(IBeaconProxyFactory(withdrawals.bagFactory).DEFAULT_ADMIN_ROLE(), cfg.timelock);
+        IBeaconProxyFactory(withdrawals.bagFactory)
+            .grantRole(IBeaconProxyFactory(withdrawals.bagFactory).DEFAULT_ADMIN_ROLE(), cfg.admin);
+        IBeaconProxyFactory(withdrawals.bagFactory)
+            .renounceRole(IBeaconProxyFactory(withdrawals.bagFactory).DEFAULT_ADMIN_ROLE(), address(this));
 
         withdrawals.requestPolicy = address(new MinAmountRequestPolicy(cfg.minWithdrawalAmount));
 
@@ -60,6 +66,7 @@ library WithdrawalSystemDeployer {
             );
         IWithdrawalRequest request = IWithdrawalRequest(withdrawals.withdrawalRequest);
         request.grantRole(request.DEFAULT_ADMIN_ROLE(), cfg.timelock);
+        request.grantRole(request.DEFAULT_ADMIN_ROLE(), cfg.admin);
         request.grantRole(request.PAUSER_ROLE(), cfg.admin);
         request.renounceRole(request.DEFAULT_ADMIN_ROLE(), address(this));
     }

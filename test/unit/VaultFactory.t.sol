@@ -436,9 +436,6 @@ contract MockWithdrawalRequest {
 
     function grantRole(bytes32 role, address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
         hasRole[role][account] = true;
-        if (role == DEFAULT_ADMIN_ROLE) {
-            defaultAdmin = account;
-        }
     }
 
     function renounceRole(bytes32 role, address callerConfirmation) external {
@@ -461,11 +458,21 @@ contract MockWithdrawer {
 }
 
 contract MockBagFactory {
+    bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
+    bytes32 public constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
+    bytes32 public constant IMPLEMENTATION_MANAGER_ROLE = keccak256("IMPLEMENTATION_MANAGER_ROLE");
+
     address public implementation;
     address public defaultAdmin;
     address public creator;
     address public implementationManager;
     bool public initialized;
+    mapping(bytes32 => mapping(address => bool)) public hasRole;
+
+    modifier onlyRole(bytes32 role) {
+        require(hasRole[role][msg.sender], "role");
+        _;
+    }
 
     function initialize(
         address implementation_,
@@ -479,6 +486,18 @@ contract MockBagFactory {
         defaultAdmin = defaultAdmin_;
         creator = creator_;
         implementationManager = implementationManager_;
+        hasRole[DEFAULT_ADMIN_ROLE][defaultAdmin_] = true;
+        hasRole[CREATOR_ROLE][creator_] = true;
+        hasRole[IMPLEMENTATION_MANAGER_ROLE][implementationManager_] = true;
+    }
+
+    function grantRole(bytes32 role, address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        hasRole[role][account] = true;
+    }
+
+    function renounceRole(bytes32 role, address callerConfirmation) external {
+        require(msg.sender == callerConfirmation, "confirmation");
+        hasRole[role][callerConfirmation] = false;
     }
 }
 
@@ -891,6 +910,7 @@ contract VaultFactoryTest is Test {
         assertTrue(vault.activeAsset(address(asset)));
 
         assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(vault.hasRole(vault.PROCESSOR_ROLE(), processor));
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), pauser));
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), unpauser));
@@ -936,11 +956,11 @@ contract VaultFactoryTest is Test {
         MockWithdrawalRequest withdrawalRequest = MockWithdrawalRequest(created.withdrawalRequest);
         assertTrue(withdrawalRequest.initialized());
         assertEq(withdrawalRequest.token(), created.vault);
-        assertEq(withdrawalRequest.defaultAdmin(), created.timelock);
         assertEq(withdrawalRequest.resolver(), resolver);
         assertEq(withdrawalRequest.configurationManager(), created.timelock);
         assertEq(withdrawalRequest.pauser(), pauser);
         assertTrue(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(withdrawalRequest.hasRole(withdrawalRequest.PAUSER_ROLE(), pauser));
         assertTrue(withdrawalRequest.hasRole(withdrawalRequest.PAUSER_ROLE(), admin));
         assertFalse(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), address(factory)));
@@ -956,9 +976,11 @@ contract VaultFactoryTest is Test {
 
         MockBagFactory bagFactory = MockBagFactory(created.bagFactory);
         assertEq(bagFactory.implementation(), address(bagLogic));
-        assertEq(bagFactory.defaultAdmin(), created.timelock);
         assertEq(bagFactory.creator(), created.withdrawalRequest);
         assertEq(bagFactory.implementationManager(), created.timelock);
+        assertTrue(bagFactory.hasRole(bagFactory.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(bagFactory.hasRole(bagFactory.DEFAULT_ADMIN_ROLE(), admin));
+        assertFalse(bagFactory.hasRole(bagFactory.DEFAULT_ADMIN_ROLE(), address(factory)));
 
         assertEq(MinAmountRequestPolicy(created.requestPolicy).minWithdrawalAmount(), 0.01 ether);
 
@@ -1088,6 +1110,7 @@ contract VaultFactoryTest is Test {
         assertEq(metaHooks.hooks(1), created.feeHook);
         assertEq(metaHooks.hooks(2), created.processAccountingGuardHook);
         assertTrue(metaHooks.hasRole(metaHooks.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(metaHooks.hasRole(metaHooks.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(metaHooks.hasRole(metaHooks.HOOK_MANAGER_ROLE(), created.timelock));
         assertFalse(metaHooks.hasRole(metaHooks.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertFalse(metaHooks.hasRole(metaHooks.HOOK_MANAGER_ROLE(), address(factory)));
@@ -1095,6 +1118,7 @@ contract VaultFactoryTest is Test {
         IPauserHookView pauserHook = IPauserHookView(created.pauserHook);
         assertEq(pauserHook.VAULT(), created.metaHooks);
         assertTrue(pauserHook.hasRole(pauserHook.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(pauserHook.hasRole(pauserHook.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(pauserHook.hasRole(pauserHook.PAUSER_ROLE(), pauser));
         assertTrue(pauserHook.hasRole(pauserHook.UNPAUSER_ROLE(), unpauser));
         for (uint8 hookCall; hookCall < 5; hookCall++) {
@@ -1266,6 +1290,7 @@ contract VaultFactoryTest is Test {
 
         // Strategy roles: timelock critical, actors operational, vault allocator, factory clean.
         assertTrue(strategy.hasRole(strategy.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(strategy.hasRole(strategy.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(strategy.hasRole(strategy.PROCESSOR_ROLE(), processor));
         assertTrue(strategy.hasRole(strategy.PAUSER_ROLE(), pauser));
         assertTrue(strategy.hasRole(strategy.UNPAUSER_ROLE(), unpauser));
@@ -1294,6 +1319,7 @@ contract VaultFactoryTest is Test {
         assertEq(accountingToken.symbol(), "aFLEX");
         assertEq(accountingToken.accountingModule(), created.accountingModule);
         assertTrue(accountingToken.hasRole(accountingToken.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(accountingToken.hasRole(accountingToken.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(accountingToken.hasRole(accountingToken.ACCOUNTING_MODULE_MANAGER_ROLE(), created.timelock));
         assertFalse(accountingToken.hasRole(accountingToken.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertFalse(accountingToken.hasRole(accountingToken.ACCOUNTING_MODULE_MANAGER_ROLE(), address(factory)));
@@ -1307,6 +1333,7 @@ contract VaultFactoryTest is Test {
         assertEq(accountingModule.minRewardableAssets(), 100e6);
         assertEq(accountingModule.cooldownSeconds(), 1 hours);
         assertTrue(accountingModule.hasRole(accountingModule.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(accountingModule.hasRole(accountingModule.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(accountingModule.hasRole(accountingModule.SAFE_MANAGER_ROLE(), created.timelock));
         assertTrue(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), address(0xACC0)));
         assertTrue(accountingModule.hasRole(accountingModule.REWARDS_PROCESSOR_ROLE(), created.rewardsSweeper));
@@ -1316,6 +1343,7 @@ contract VaultFactoryTest is Test {
         // Rewards sweeper wiring.
         assertEq(rewardsSweeper.accountingModule(), created.accountingModule);
         assertTrue(rewardsSweeper.hasRole(rewardsSweeper.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(rewardsSweeper.hasRole(rewardsSweeper.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(rewardsSweeper.hasRole(rewardsSweeper.ACCOUNTING_MODULE_MANAGER_ROLE(), created.timelock));
         assertTrue(rewardsSweeper.hasRole(rewardsSweeper.REWARDS_SWEEPER_ROLE(), processor));
         assertTrue(rewardsSweeper.hasRole(rewardsSweeper.SNAPSHOT_REWARDS_SWEEPER_ROLE(), processor));
@@ -1347,8 +1375,8 @@ contract VaultFactoryTest is Test {
 
         assertTrue(safeGuard.initialized());
         assertEq(safeGuard.name(), "Flex Strategy Safeguard");
-        assertEq(safeGuard.admin(), created.timelock);
         assertTrue(safeGuard.hasRole(safeGuard.DEFAULT_ADMIN_ROLE(), created.timelock));
+        assertTrue(safeGuard.hasRole(safeGuard.DEFAULT_ADMIN_ROLE(), admin));
         assertTrue(safeGuard.hasRole(safeGuard.PROCESSOR_MANAGER_ROLE(), created.timelock));
         assertTrue(safeGuard.hasRole(safeGuard.GUARD_ADMIN_ROLE(), created.timelock));
         assertFalse(safeGuard.hasRole(safeGuard.DEFAULT_ADMIN_ROLE(), address(factory)));
@@ -1511,7 +1539,8 @@ contract VaultFactoryTest is Test {
 
         MockWithdrawalRequest withdrawalRequest = MockWithdrawalRequest(ws.withdrawalRequest);
         assertEq(withdrawalRequest.token(), standaloneVault);
-        assertEq(withdrawalRequest.defaultAdmin(), standaloneTimelock);
+        assertTrue(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), standaloneTimelock));
+        assertFalse(withdrawalRequest.hasRole(withdrawalRequest.DEFAULT_ADMIN_ROLE(), address(factory)));
         assertEq(withdrawalRequest.resolver(), resolver);
         assertEq(withdrawalRequest.configurationManager(), standaloneTimelock);
         assertEq(withdrawalRequest.pauser(), pauser);
@@ -1523,6 +1552,13 @@ contract VaultFactoryTest is Test {
         assertEq(MockWithdrawer(ws.withdrawer).token(), standaloneVault);
         assertEq(MockWithdrawer(ws.withdrawer).withdrawalRequest(), ws.withdrawalRequest);
         assertEq(MockBagFactory(ws.bagFactory).creator(), ws.withdrawalRequest);
+        assertTrue(
+            MockBagFactory(ws.bagFactory)
+                .hasRole(MockBagFactory(ws.bagFactory).DEFAULT_ADMIN_ROLE(), standaloneTimelock)
+        );
+        assertFalse(
+            MockBagFactory(ws.bagFactory).hasRole(MockBagFactory(ws.bagFactory).DEFAULT_ADMIN_ROLE(), address(factory))
+        );
         assertEq(MinAmountRequestPolicy(ws.requestPolicy).minWithdrawalAmount(), 1e17);
 
         address requestProxyAdmin = address(uint160(uint256(vm.load(ws.withdrawalRequest, ERC1967_ADMIN_SLOT))));
@@ -1600,11 +1636,11 @@ contract VaultFactoryTest is Test {
             deployProcessAccountingGuardHook: true,
             feeHook: IVaultFactory.FeeHookConfig({performanceFee: 0.1e18, feeRecipient: FEE_RECIPIENT}),
             processAccountingGuardHook: IVaultFactory.ProcessAccountingGuardHookConfig({
-                    maxTotalAssetsDecreaseRatio: 0.2e18,
-                    maxTotalAssetsIncreaseRatio: 0.3e18,
-                    maxTotalSupplyIncreaseRatio: 0.4e18,
-                    expectedPerformanceFee: 0.1e18
-                })
+                maxTotalAssetsDecreaseRatio: 0.2e18,
+                maxTotalAssetsIncreaseRatio: 0.3e18,
+                maxTotalSupplyIncreaseRatio: 0.4e18,
+                expectedPerformanceFee: 0.1e18
+            })
         });
     }
 

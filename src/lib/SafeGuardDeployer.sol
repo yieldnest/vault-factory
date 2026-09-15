@@ -16,6 +16,7 @@ library SafeGuardDeployer {
     struct Config {
         address safeGuardLogic;
         address timelock;
+        address admin;
         address baseAsset;
         address offRampAddress;
         string strategyName;
@@ -30,14 +31,14 @@ library SafeGuardDeployer {
 
         ISafeGuard guard = ISafeGuard(safeGuard);
         _configureOffRampRule(guard, cfg.baseAsset, cfg.offRampAddress);
-        _grantFinalRoles(guard, cfg.timelock);
+        _grantFinalRoles(guard, cfg.timelock, cfg.admin);
         _renounceTemporaryRoles(guard);
     }
 
     function _validateConfig(Config memory cfg) internal pure {
         if (
-            cfg.safeGuardLogic == address(0) || cfg.timelock == address(0) || cfg.baseAsset == address(0)
-                || cfg.offRampAddress == address(0)
+            cfg.safeGuardLogic == address(0) || cfg.timelock == address(0) || cfg.admin == address(0)
+                || cfg.baseAsset == address(0) || cfg.offRampAddress == address(0)
         ) {
             revert IVaultFactory.ZeroAddress();
         }
@@ -56,8 +57,9 @@ library SafeGuardDeployer {
         safeGuard.setProcessorRules(targets, functionSigs, rules);
     }
 
-    function _grantFinalRoles(ISafeGuard safeGuard, address timelock) internal {
+    function _grantFinalRoles(ISafeGuard safeGuard, address timelock, address admin) internal {
         safeGuard.grantRole(DEFAULT_ADMIN_ROLE, timelock);
+        safeGuard.grantRole(DEFAULT_ADMIN_ROLE, admin);
         safeGuard.grantRole(PROCESSOR_MANAGER_ROLE, timelock);
         safeGuard.grantRole(GUARD_ADMIN_ROLE, timelock);
     }

@@ -224,6 +224,7 @@ contract VaultFactoryIntegrationTest is Test {
         assertEq(_proxyAdminOwner(created.bagFactory), created.timelock, "bag factory proxy admin owner");
 
         assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), created.timelock), "vault admin");
+        assertTrue(vault.hasRole(vault.DEFAULT_ADMIN_ROLE(), TestConstants.ADMIN), "vault external admin");
         assertTrue(vault.hasRole(vault.PROCESSOR_ROLE(), TestConstants.PROCESSOR), "processor");
         assertTrue(vault.hasRole(vault.PAUSER_ROLE(), TestConstants.PAUSER), "pauser");
         assertTrue(vault.hasRole(vault.UNPAUSER_ROLE(), TestConstants.UNPAUSER), "unpauser");
@@ -252,6 +253,7 @@ contract VaultFactoryIntegrationTest is Test {
         assertEq(request.requestPolicy(), created.requestPolicy, "request policy");
         assertEq(request.maxDataLength(), MAX_DATA_LENGTH, "max data length");
         assertTrue(request.hasRole(request.DEFAULT_ADMIN_ROLE(), created.timelock), "request admin");
+        assertTrue(request.hasRole(request.DEFAULT_ADMIN_ROLE(), TestConstants.ADMIN), "request external admin");
         assertTrue(request.hasRole(request.RESOLVER_ROLE(), TestConstants.RESOLVER), "request resolver");
         assertTrue(request.hasRole(request.CONFIGURATION_MANAGER_ROLE(), created.timelock), "request config manager");
         assertTrue(request.hasRole(request.PAUSER_ROLE(), TestConstants.PAUSER), "request pauser");
@@ -262,6 +264,7 @@ contract VaultFactoryIntegrationTest is Test {
 
         assertEq(bagFactory.implementation(), RegistryImplementations.BAG_IMPLEMENTATION, "bag implementation");
         assertTrue(bagFactory.hasRole(bagFactory.DEFAULT_ADMIN_ROLE(), created.timelock), "bag admin");
+        assertTrue(bagFactory.hasRole(bagFactory.DEFAULT_ADMIN_ROLE(), TestConstants.ADMIN), "bag external admin");
         assertTrue(bagFactory.hasRole(bagFactory.CREATOR_ROLE(), created.withdrawalRequest), "bag creator");
         assertTrue(
             bagFactory.hasRole(bagFactory.IMPLEMENTATION_MANAGER_ROLE(), created.timelock), "bag implementation manager"
