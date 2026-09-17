@@ -15,6 +15,7 @@ import {SafeTestLib} from "test/lib/SafeTestLib.sol";
 import {TestConstants} from "test/lib/TestConstants.sol";
 import {ISafe} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/ISafe.sol";
 import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/IGuardManager.sol";
+import {Enum} from "lib/safeguard/lib/safe-smart-account/contracts/libraries/Enum.sol";
 
 interface IVaultFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
@@ -142,7 +143,11 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1_009_999, "strategy assets rate");
         assertLt(IVaultFlow(created.flexStrategy).convertToShares(1e6), strategySharesBefore, "strategy shares rate");
         assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1_009_999, "vault assets rate");
-        assertGt(IVaultFlow(created.flexStrategy).convertToAssets(1e6), strategyAssetsBefore, "strategy assets rate increased");
+        assertGt(
+            IVaultFlow(created.flexStrategy).convertToAssets(1e6),
+            strategyAssetsBefore,
+            "strategy assets rate increased"
+        );
         assertGt(IVaultFlow(created.vault).convertToAssets(1e18), vaultAssetsBefore, "vault assets rate increased");
         assertLt(IVaultFlow(created.vault).convertToShares(1e6), vaultSharesBefore, "vault shares rate");
         assertEq(
@@ -218,6 +223,42 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
 
         assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), depositAmount, "off-ramp funded");
         assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
+    }
+
+    function test_Flex_Guard_Blocks_Non_OffRamp_Transfer_And_Approval() public {
+        uint256 depositAmount = 3e6;
+        uint256 ethAmount = 1 ether;
+        address blockedRecipient = address(0xBAD);
+        address blockedSpender = address(0xBEEF);
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+        );
+
+        _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+        _moveVaultAssetsToFlexStrategy(depositAmount);
+
+        _assertSafeTransactionBlocked(
+            TestConstants.USDC, abi.encodeCall(IERC20.transfer, (blockedRecipient, depositAmount))
+        );
+
+        _assertSafeTransactionBlocked(
+            TestConstants.USDC, abi.encodeCall(IERC20.approve, (blockedSpender, depositAmount))
+        );
+
+        vm.deal(address(safe), ethAmount);
+        _assertSafeTransactionBlocked(blockedRecipient, ethAmount, bytes(""));
+
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)), BOOTSTRAP_AMOUNT + depositAmount, "safe kept funds"
+        );
+        assertEq(address(safe).balance, ethAmount, "safe kept ETH");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(blockedRecipient), 0, "blocked recipient");
+        assertEq(blockedRecipient.balance, 0, "blocked ETH recipient");
+        assertEq(IERC20(TestConstants.USDC).allowance(address(safe), blockedSpender), 0, "blocked allowance");
     }
 
     function test_Flex_OffRamp_Returns_Funds_And_Resolver_Satisfies_Withdrawals() public {
@@ -326,10 +367,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         uint256 expectedVaultAssetsAfterRewards = IERC20(TestConstants.USDC).balanceOf(created.vault)
             + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
         assertApproxEqAbs(
-            IVaultFlow(created.vault).totalAssets(),
-            expectedVaultAssetsAfterRewards,
-            1,
-            "vault assets after rewards"
+            IVaultFlow(created.vault).totalAssets(), expectedVaultAssetsAfterRewards, 1, "vault assets after rewards"
         );
 
         skip(uint256(IAccountingModuleFlow(created.accountingModule).cooldownSeconds()) + 1);
@@ -350,10 +388,7 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         uint256 expectedVaultAssetsAfterLoss = IERC20(TestConstants.USDC).balanceOf(created.vault)
             + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
         assertApproxEqAbs(
-            IVaultFlow(created.vault).totalAssets(),
-            expectedVaultAssetsAfterLoss,
-            1,
-            "vault assets after loss"
+            IVaultFlow(created.vault).totalAssets(), expectedVaultAssetsAfterLoss, 1, "vault assets after loss"
         );
     }
 
@@ -478,6 +513,44 @@ contract VaultFactoryFlexFlowIntegrationTest is Test {
         IBagFlow(bag).claim(claimAssets, payable(user), claimAmounts);
         IWithdrawalRequestFlow(created.withdrawalRequest).burn(requestId);
         vm.stopPrank();
+    }
+
+    function _execSafeTransaction(address to, bytes memory data) internal returns (bool success) {
+        success = _execSafeTransaction(to, 0, data);
+    }
+
+    function _execSafeTransaction(address to, uint256 value, bytes memory data) internal returns (bool success) {
+        vm.prank(TestConstants.SAFE_OWNER);
+        success = safe.execTransaction(
+            to,
+            value,
+            data,
+            Enum.Operation.Call,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            SafeTestLib.prevalidatedOwnerSignature(TestConstants.SAFE_OWNER)
+        );
+    }
+
+    function _assertSafeTransactionBlocked(address to, bytes memory data) internal {
+        _assertSafeTransactionBlocked(to, 0, data);
+    }
+
+    function _assertSafeTransactionBlocked(address to, uint256 value, bytes memory data) internal {
+        try this.execSafeTransactionForTest(to, value, data) returns (bool success) {
+            assertFalse(success, "guarded safe transaction blocked");
+        } catch {
+            // The Safe may bubble the guard revert instead of returning false. Either outcome
+            // proves the guarded transaction cannot execute.
+        }
+    }
+
+    function execSafeTransactionForTest(address to, uint256 value, bytes memory data) external returns (bool success) {
+        require(msg.sender == address(this), "test only");
+        success = _execSafeTransaction(to, value, data);
     }
 
     function _deployRegistry() internal returns (IRegistry deployedRegistry) {
