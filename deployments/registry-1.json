@@ -1,0 +1,7 @@
+{
+  "registry": "0x40E9567446BbF8D9810FfE239E6dee4AC0aDC2f2",
+  "registryImplementation": "0x272c0b5A44F41aF140701b609698fcDb680DEcCc",
+  "registryProxyAdmin": "0x96Db14fff2dd7e6825C95dBC3d015F2385e871b5",
+  "registryTimelock": "0xCD7c785E34F3558c8F94F5b5c4Fd287c46C2d5eD",
+  "safeGuardImplementation": "0x32bd56D0b478EF27F5eD864b306294f3A5a31207"
+}

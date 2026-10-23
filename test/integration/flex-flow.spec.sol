@@ -1,0 +1,637 @@
+// SPDX-License-Identifier: BSD-3-Clause
+pragma solidity ^0.8.24;
+
+import {Test} from "forge-std/Test.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {IRegistry} from "src/interfaces/IRegistry.sol";
+import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
+import {Registry} from "src/Registry.sol";
+import {RegistryKeys} from "src/lib/RegistryKeys.sol";
+import {VaultFactory} from "src/VaultFactory.sol";
+import {VaultVerifier} from "src/VaultVerifier.sol";
+import {RegistryImplementations} from "script/RegistryImplementations.sol";
+import {SafeTestLib} from "test/lib/SafeTestLib.sol";
+import {TestConstants} from "test/lib/TestConstants.sol";
+import {ISafe} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/ISafe.sol";
+import {IGuardManager} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/IGuardManager.sol";
+import {Enum} from "lib/safeguard/lib/safe-smart-account/contracts/libraries/Enum.sol";
+
+interface IVaultFlow {
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function convertToAssets(uint256 shares) external view returns (uint256 assets);
+    function convertToShares(uint256 assets) external view returns (uint256 shares);
+    function previewWithdraw(uint256 assets) external view returns (uint256 shares);
+    function previewRedeem(uint256 shares) external view returns (uint256 assets);
+    function totalAssets() external view returns (uint256 assets);
+    function totalSupply() external view returns (uint256 supply);
+    function processor(address[] calldata targets, uint256[] calldata values, bytes[] calldata data)
+        external
+        returns (bytes[] memory);
+}
+
+interface IWithdrawalRequestFlow {
+    struct Request {
+        address bag;
+        uint256 amountLocked;
+        address[] assetsRedeemed;
+        uint256 rateAtRequest;
+        bytes data;
+    }
+
+    function requestWithdrawal(uint256 amount, address receiver) external returns (uint256 id);
+    function resolveWithdrawalRequest(uint256 id, address asset, uint256 assets) external returns (uint256 amountBurned);
+    function requests(uint256 id) external view returns (Request memory request);
+    function ownerOf(uint256 id) external view returns (address owner);
+    function burn(uint256 id) external;
+}
+
+interface IBagFlow {
+    function claim(address[] calldata assets, address payable recipient, uint256[] calldata amounts)
+        external
+        returns (uint256[] memory);
+}
+
+interface IStrategyFlow {
+    function accountingModule() external view returns (address);
+    function hooks() external view returns (address);
+}
+
+interface IAccountingModuleFlow {
+    function safe() external view returns (address);
+    function accountingToken() external view returns (address);
+    function cooldownSeconds() external view returns (uint16);
+    function processRewards(uint256 amount) external;
+    function processLosses(uint256 amount) external;
+}
+
+contract VaultFactoryFlexFlowIntegrationTest is Test {
+    uint256 private constant BOOTSTRAP_AMOUNT = 1e6;
+    uint256 private constant MIN_DEPOSIT_AMOUNT = 1e6;
+    uint256 private constant MAX_DEPOSIT_AMOUNT = 1_000_000e6;
+
+    IRegistry private registry;
+    VaultFactory private factory;
+    ISafe private safe;
+    IVaultFactory.CreatedVault private created;
+
+    function setUp() public {
+        vm.createSelectFork(vm.rpcUrl("eth_mainnet"));
+
+        registry = _deployRegistry();
+        _populateRegistry();
+        factory = new VaultFactory(registry);
+        safe = SafeTestLib.deploySingleOwnerSafe(TestConstants.SAFE_OWNER);
+
+        deal(TestConstants.USDC, TestConstants.CREATOR, BOOTSTRAP_AMOUNT * 2);
+
+        vm.startPrank(TestConstants.CREATOR);
+        IERC20(TestConstants.USDC).approve(address(factory), BOOTSTRAP_AMOUNT * 2);
+        created = factory.createVault(_vaultParams(), _flexParams(address(safe)), _emptyHooksConfig());
+        vm.stopPrank();
+    }
+
+    function test_Flex_Bootstrap_Conversion_Rates() public view {
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault convert assets");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault convert shares");
+        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), 0, "vault has no strategy shares");
+
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy convert assets");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy convert shares");
+    }
+
+    function test_Flex_Deposit_Preserves_Conversion_Rates() public {
+        uint256 depositAmount = 10e6;
+
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault assets before");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault shares before");
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy assets before");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy shares before");
+
+        uint256 shares = _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+
+        assertEq(shares, depositAmount * 1e12, "deposit shares");
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1e6, "vault assets after");
+        assertEq(IVaultFlow(created.vault).convertToShares(1e6), 1e18, "vault shares after");
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1e6, "strategy assets after");
+        assertEq(IVaultFlow(created.flexStrategy).convertToShares(1e6), 1e6, "strategy shares after");
+    }
+
+    function test_Flex_Deposit_Rewards_Increase_Conversion_Rates() public {
+        uint256 depositAmount = 1_000_000e6;
+        uint256 rewards = 10_000e6;
+
+        uint256 vaultAssetsBefore = IVaultFlow(created.vault).convertToAssets(1e18);
+        uint256 vaultSharesBefore = IVaultFlow(created.vault).convertToShares(1e6);
+        uint256 strategyAssetsBefore = IVaultFlow(created.flexStrategy).convertToAssets(1e6);
+        uint256 strategySharesBefore = IVaultFlow(created.flexStrategy).convertToShares(1e6);
+
+        _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+        _moveVaultAssetsToFlexStrategy(depositAmount);
+
+        uint256 vaultTotalAssetsBeforeRewards = IVaultFlow(created.vault).totalAssets();
+        uint256 vaultStrategyShares = IERC20(created.flexStrategy).balanceOf(created.vault);
+        uint256 vaultStrategyAssetsBeforeRewards = IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+
+        skip(365 days);
+        vm.prank(TestConstants.PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processRewards(rewards);
+
+        uint256 vaultStrategyAssetsAfterRewards = IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+        uint256 vaultTotalAssetsAfterRewards = IVaultFlow(created.vault).totalAssets();
+
+        assertEq(IVaultFlow(created.flexStrategy).convertToAssets(1e6), 1_009_999, "strategy assets rate");
+        assertLt(IVaultFlow(created.flexStrategy).convertToShares(1e6), strategySharesBefore, "strategy shares rate");
+        assertEq(IVaultFlow(created.vault).convertToAssets(1e18), 1_009_999, "vault assets rate");
+        assertGt(
+            IVaultFlow(created.flexStrategy).convertToAssets(1e6),
+            strategyAssetsBefore,
+            "strategy assets rate increased"
+        );
+        assertGt(IVaultFlow(created.vault).convertToAssets(1e18), vaultAssetsBefore, "vault assets rate increased");
+        assertLt(IVaultFlow(created.vault).convertToShares(1e6), vaultSharesBefore, "vault shares rate");
+        assertEq(
+            vaultTotalAssetsAfterRewards - vaultTotalAssetsBeforeRewards,
+            vaultStrategyAssetsAfterRewards - vaultStrategyAssetsBeforeRewards,
+            "vault reward assets"
+        );
+    }
+
+    function testFuzz_Flex_Deposit_Processor_Move_And_Guarded_OffRamp(uint256 depositAmount) public {
+        depositAmount = bound(depositAmount, MIN_DEPOSIT_AMOUNT, MAX_DEPOSIT_AMOUNT);
+
+        assertEq(IStrategyFlow(created.flexStrategy).hooks(), created.accountingModuleHook, "strategy hook");
+        assertEq(IStrategyFlow(created.flexStrategy).accountingModule(), created.accountingModule, "accounting module");
+        assertEq(IAccountingModuleFlow(created.accountingModule).safe(), address(safe), "accounting safe");
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+        );
+
+        uint256 safeBalanceAfterBootstrap = IERC20(TestConstants.USDC).balanceOf(address(safe));
+        assertEq(safeBalanceAfterBootstrap, BOOTSTRAP_AMOUNT, "bootstrap moved to safe");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(created.flexStrategy), 0, "strategy does not custody USDC after hook"
+        );
+        assertEq(IERC20(created.accountingToken).balanceOf(created.flexStrategy), BOOTSTRAP_AMOUNT, "bootstrap IOU");
+
+        deal(TestConstants.USDC, TestConstants.DEPOSITOR, depositAmount);
+        vm.startPrank(TestConstants.DEPOSITOR);
+        IERC20(TestConstants.USDC).approve(created.vault, depositAmount);
+        IVaultFlow(created.vault).deposit(depositAmount, TestConstants.DEPOSITOR);
+        vm.stopPrank();
+
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + depositAmount, "vault holds deposit"
+        );
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceAfterBootstrap,
+            "safe unchanged before processor"
+        );
+
+        _moveVaultAssetsToFlexStrategy(depositAmount);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault USDC allocated");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.flexStrategy), 0, "hook emptied strategy USDC");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceAfterBootstrap + depositAmount,
+            "safe received processor allocation"
+        );
+        assertEq(
+            IERC20(created.accountingToken).balanceOf(created.flexStrategy),
+            BOOTSTRAP_AMOUNT + depositAmount,
+            "accounting token minted to strategy"
+        );
+        assertEq(IERC20(created.flexStrategy).balanceOf(created.vault), depositAmount, "vault strategy shares");
+        assertEq(
+            IERC20(created.flexStrategy).balanceOf(TestConstants.BOOTSTRAP_RECEIVER),
+            BOOTSTRAP_AMOUNT,
+            "bootstrap receiver strategy shares"
+        );
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, depositAmount))
+        );
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), depositAmount, "off-ramp funded");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterBootstrap, "safe debited");
+    }
+
+    function test_Flex_Guard_Blocks_Non_OffRamp_Transfer_And_Approval() public {
+        uint256 depositAmount = 3e6;
+        uint256 ethAmount = 1 ether;
+        address blockedRecipient = address(0xBAD);
+        address blockedSpender = address(0xBEEF);
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+        );
+
+        _depositToVault(TestConstants.DEPOSITOR, depositAmount);
+        _moveVaultAssetsToFlexStrategy(depositAmount);
+
+        _assertSafeTransactionBlocked(
+            TestConstants.USDC, abi.encodeCall(IERC20.transfer, (blockedRecipient, depositAmount))
+        );
+
+        _assertSafeTransactionBlocked(
+            TestConstants.USDC, abi.encodeCall(IERC20.approve, (blockedSpender, depositAmount))
+        );
+
+        vm.deal(address(safe), ethAmount);
+        _assertSafeTransactionBlocked(blockedRecipient, ethAmount, bytes(""));
+
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)), BOOTSTRAP_AMOUNT + depositAmount, "safe kept funds"
+        );
+        assertEq(address(safe).balance, ethAmount, "safe kept ETH");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(blockedRecipient), 0, "blocked recipient");
+        assertEq(blockedRecipient.balance, 0, "blocked ETH recipient");
+        assertEq(IERC20(TestConstants.USDC).allowance(address(safe), blockedSpender), 0, "blocked allowance");
+    }
+
+    function test_Flex_OffRamp_Returns_Funds_And_Resolver_Satisfies_Withdrawals() public {
+        uint256 userDeposit = 3e6;
+        uint256 userWithdrawalAssets = 1e6;
+        uint256 totalDeposit = userDeposit * 2;
+        uint256 returnedAssets = userWithdrawalAssets * 2;
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.approve, (created.accountingModule, type(uint256).max))
+        );
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            address(safe),
+            abi.encodeWithSelector(IGuardManager.setGuard.selector, created.safeGuard)
+        );
+
+        uint256 userOneShares = _depositToVault(TestConstants.DEPOSITOR, userDeposit);
+        uint256 userTwoShares = _depositToVault(TestConstants.DEPOSITOR_TWO, userDeposit);
+        assertGt(userOneShares, 0, "user one shares");
+        assertEq(userTwoShares, userOneShares, "equal deposit shares");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + totalDeposit, "vault funded");
+
+        uint256 safeBalanceBeforeAllocation = IERC20(TestConstants.USDC).balanceOf(address(safe));
+        _moveVaultAssetsToFlexStrategy(totalDeposit);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault allocated");
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceBeforeAllocation + totalDeposit,
+            "safe received allocation"
+        );
+
+        SafeTestLib.execSingleOwnerSafeTransaction(
+            safe,
+            TestConstants.SAFE_OWNER,
+            TestConstants.USDC,
+            abi.encodeCall(IERC20.transfer, (TestConstants.OFF_RAMP, totalDeposit))
+        );
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.OFF_RAMP), totalDeposit, "off-ramp received");
+        uint256 safeBalanceAfterOffRamp = IERC20(TestConstants.USDC).balanceOf(address(safe));
+
+        vm.prank(TestConstants.OFF_RAMP);
+        IERC20(TestConstants.USDC).transfer(address(safe), returnedAssets);
+        assertEq(
+            IERC20(TestConstants.USDC).balanceOf(address(safe)),
+            safeBalanceAfterOffRamp + returnedAssets,
+            "safe receives returned funds"
+        );
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT, "vault unchanged before return");
+
+        _returnFlexStrategyAssetsToVault(returnedAssets);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(created.vault), BOOTSTRAP_AMOUNT + returnedAssets, "vault repaid");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(address(safe)), safeBalanceAfterOffRamp, "safe returned funds");
+
+        uint256 userOneWithdrawalShares = IVaultFlow(created.vault).previewWithdraw(userWithdrawalAssets);
+        uint256 userTwoWithdrawalShares = userOneWithdrawalShares / 2;
+        assertLe(userOneWithdrawalShares, userOneShares, "user one withdrawal shares available");
+        assertLe(userTwoWithdrawalShares, userTwoShares, "user two withdrawal shares available");
+
+        _requestResolveClaimWithdrawals(userOneWithdrawalShares, userTwoWithdrawalShares);
+    }
+
+    function test_Flex_Deposit_ProcessRewards_Then_ProcessLoss() public {
+        uint256 userDeposit = 1_000_000e6;
+        uint256 rewards = 10_000e6;
+        uint256 loss = 5_000e6;
+
+        _depositToVault(TestConstants.DEPOSITOR, userDeposit);
+        _moveVaultAssetsToFlexStrategy(userDeposit);
+
+        uint256 accountingBalanceAfterDeposit = IERC20(created.accountingToken).balanceOf(created.flexStrategy);
+        uint256 strategyAssetsAfterDeposit = IVaultFlow(created.flexStrategy).totalAssets();
+        uint256 vaultStrategyShares = IERC20(created.flexStrategy).balanceOf(created.vault);
+        uint256 vaultAssetsAfterDeposit = IVaultFlow(created.vault).totalAssets();
+
+        assertEq(accountingBalanceAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "accounting token after deposit");
+        assertEq(strategyAssetsAfterDeposit, BOOTSTRAP_AMOUNT + userDeposit, "strategy assets after deposit");
+        assertEq(
+            vaultAssetsAfterDeposit,
+            IERC20(TestConstants.USDC).balanceOf(created.vault)
+                + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares),
+            "vault assets after deposit"
+        );
+
+        skip(365 days);
+
+        vm.prank(TestConstants.PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processRewards(rewards);
+
+        assertEq(
+            IERC20(created.accountingToken).balanceOf(created.flexStrategy),
+            accountingBalanceAfterDeposit + rewards,
+            "accounting token after rewards"
+        );
+        assertEq(
+            IVaultFlow(created.flexStrategy).totalAssets(),
+            strategyAssetsAfterDeposit + rewards,
+            "strategy assets after rewards"
+        );
+        uint256 expectedVaultAssetsAfterRewards = IERC20(TestConstants.USDC).balanceOf(created.vault)
+            + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+        assertApproxEqAbs(
+            IVaultFlow(created.vault).totalAssets(), expectedVaultAssetsAfterRewards, 1, "vault assets after rewards"
+        );
+
+        skip(uint256(IAccountingModuleFlow(created.accountingModule).cooldownSeconds()) + 1);
+
+        vm.prank(TestConstants.LOSS_PROCESSOR);
+        IAccountingModuleFlow(created.accountingModule).processLosses(loss);
+
+        assertEq(
+            IERC20(created.accountingToken).balanceOf(created.flexStrategy),
+            accountingBalanceAfterDeposit + rewards - loss,
+            "accounting token after loss"
+        );
+        assertEq(
+            IVaultFlow(created.flexStrategy).totalAssets(),
+            strategyAssetsAfterDeposit + rewards - loss,
+            "strategy assets after loss"
+        );
+        uint256 expectedVaultAssetsAfterLoss = IERC20(TestConstants.USDC).balanceOf(created.vault)
+            + IVaultFlow(created.flexStrategy).convertToAssets(vaultStrategyShares);
+        assertApproxEqAbs(
+            IVaultFlow(created.vault).totalAssets(), expectedVaultAssetsAfterLoss, 1, "vault assets after loss"
+        );
+    }
+
+    function _requestResolveClaimWithdrawals(uint256 userOneWithdrawalShares, uint256 userTwoWithdrawalShares)
+        internal
+    {
+        uint256 requestIdOne = _requestWithdrawal(TestConstants.DEPOSITOR, userOneWithdrawalShares);
+        uint256 requestIdTwo = _requestWithdrawal(TestConstants.DEPOSITOR_TWO, userTwoWithdrawalShares);
+
+        IWithdrawalRequestFlow request = IWithdrawalRequestFlow(created.withdrawalRequest);
+        IWithdrawalRequestFlow.Request memory requestOne = request.requests(requestIdOne);
+        IWithdrawalRequestFlow.Request memory requestTwo = request.requests(requestIdTwo);
+        assertEq(request.ownerOf(requestIdOne), TestConstants.DEPOSITOR, "request one owner");
+        assertEq(request.ownerOf(requestIdTwo), TestConstants.DEPOSITOR_TWO, "request two owner");
+        assertEq(requestOne.amountLocked, userOneWithdrawalShares, "request one locked");
+        assertEq(requestTwo.amountLocked, userTwoWithdrawalShares, "request two locked");
+        assertEq(
+            IERC20(created.vault).balanceOf(created.withdrawalRequest),
+            userOneWithdrawalShares + userTwoWithdrawalShares,
+            "shares locked"
+        );
+
+        uint256 requestOneAssets = IVaultFlow(created.vault).previewRedeem(requestOne.amountLocked);
+        uint256 requestOneSharesBurned = _resolveWithdrawal(requestIdOne, requestOneAssets);
+
+        uint256 requestTwoAssets = IVaultFlow(created.vault).previewRedeem(requestTwo.amountLocked);
+        assertLt(requestTwoAssets, requestOneAssets, "different resolved assets");
+        uint256 requestTwoSharesBurned = _resolveWithdrawal(requestIdTwo, requestTwoAssets);
+        assertEq(requestOneSharesBurned, userOneWithdrawalShares, "request one shares burned");
+        assertEq(requestTwoSharesBurned, userTwoWithdrawalShares, "request two shares burned");
+
+        requestOne = request.requests(requestIdOne);
+        requestTwo = request.requests(requestIdTwo);
+        assertEq(requestOne.amountLocked, 0, "request one resolved");
+        assertEq(requestTwo.amountLocked, 0, "request two resolved");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestOne.bag), requestOneAssets, "bag one assets");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(requestTwo.bag), requestTwoAssets, "bag two assets");
+        assertEq(IERC20(created.vault).balanceOf(created.withdrawalRequest), 0, "shares burned");
+
+        _claimAndBurnRequest(TestConstants.DEPOSITOR, requestIdOne, requestOne.bag, requestOneAssets);
+        _claimAndBurnRequest(TestConstants.DEPOSITOR_TWO, requestIdTwo, requestTwo.bag, requestTwoAssets);
+
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR), requestOneAssets, "user one paid");
+        assertEq(IERC20(TestConstants.USDC).balanceOf(TestConstants.DEPOSITOR_TWO), requestTwoAssets, "user two paid");
+    }
+
+    function test_Verifier_Accepts_Factory_Created_Flex_Vault() public {
+        VaultVerifier verifier = new VaultVerifier();
+        assertTrue(
+            verifier.verify(
+                created.vault,
+                VaultVerifier.Verification({
+                    factory: address(factory),
+                    created: created,
+                    vaultParams: _vaultParams(),
+                    flexParams: _flexParams(address(safe)),
+                    hooksConfig: _emptyHooksConfig()
+                })
+            ),
+            "verification"
+        );
+    }
+
+    function _moveVaultAssetsToFlexStrategy(uint256 amount) internal {
+        address[] memory targets = new address[](2);
+        targets[0] = TestConstants.USDC;
+        targets[1] = created.flexStrategy;
+
+        uint256[] memory values = new uint256[](2);
+
+        bytes[] memory data = new bytes[](2);
+        data[0] = abi.encodeCall(IERC20.approve, (created.flexStrategy, amount));
+        data[1] = abi.encodeWithSignature("deposit(uint256,address)", amount, created.vault);
+
+        vm.prank(TestConstants.PROCESSOR);
+        IVaultFlow(created.vault).processor(targets, values, data);
+    }
+
+    function _returnFlexStrategyAssetsToVault(uint256 amount) internal {
+        address[] memory targets = new address[](1);
+        targets[0] = created.flexStrategy;
+
+        uint256[] memory values = new uint256[](1);
+
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSignature("withdraw(uint256,address,address)", amount, created.vault, created.vault);
+
+        vm.prank(TestConstants.PROCESSOR);
+        IVaultFlow(created.vault).processor(targets, values, data);
+    }
+
+    function _depositToVault(address depositor, uint256 amount) internal returns (uint256 shares) {
+        deal(TestConstants.USDC, depositor, amount);
+
+        vm.startPrank(depositor);
+        IERC20(TestConstants.USDC).approve(created.vault, amount);
+        shares = IVaultFlow(created.vault).deposit(amount, depositor);
+        vm.stopPrank();
+    }
+
+    function _requestWithdrawal(address user, uint256 shares) internal returns (uint256 requestId) {
+        vm.startPrank(user);
+        IERC20(created.vault).approve(created.withdrawalRequest, shares);
+        requestId = IWithdrawalRequestFlow(created.withdrawalRequest).requestWithdrawal(shares, user);
+        vm.stopPrank();
+    }
+
+    function _resolveWithdrawal(uint256 requestId, uint256 assets) internal returns (uint256 sharesBurned) {
+        vm.prank(TestConstants.RESOLVER);
+        sharesBurned = IWithdrawalRequestFlow(created.withdrawalRequest)
+            .resolveWithdrawalRequest(requestId, TestConstants.USDC, assets);
+    }
+
+    function _claimAndBurnRequest(address user, uint256 requestId, address bag, uint256 assets) internal {
+        address[] memory claimAssets = new address[](1);
+        claimAssets[0] = TestConstants.USDC;
+
+        uint256[] memory claimAmounts = new uint256[](1);
+        claimAmounts[0] = assets;
+
+        vm.startPrank(user);
+        IBagFlow(bag).claim(claimAssets, payable(user), claimAmounts);
+        IWithdrawalRequestFlow(created.withdrawalRequest).burn(requestId);
+        vm.stopPrank();
+    }
+
+    function _execSafeTransaction(address to, bytes memory data) internal returns (bool success) {
+        success = _execSafeTransaction(to, 0, data);
+    }
+
+    function _execSafeTransaction(address to, uint256 value, bytes memory data) internal returns (bool success) {
+        vm.prank(TestConstants.SAFE_OWNER);
+        success = safe.execTransaction(
+            to,
+            value,
+            data,
+            Enum.Operation.Call,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            SafeTestLib.prevalidatedOwnerSignature(TestConstants.SAFE_OWNER)
+        );
+    }
+
+    function _assertSafeTransactionBlocked(address to, bytes memory data) internal {
+        _assertSafeTransactionBlocked(to, 0, data);
+    }
+
+    function _assertSafeTransactionBlocked(address to, uint256 value, bytes memory data) internal {
+        try this.execSafeTransactionForTest(to, value, data) returns (bool success) {
+            assertFalse(success, "guarded safe transaction blocked");
+        } catch {
+            // The Safe may bubble the guard revert instead of returning false. Either outcome
+            // proves the guarded transaction cannot execute.
+        }
+    }
+
+    function execSafeTransactionForTest(address to, uint256 value, bytes memory data) external returns (bool success) {
+        require(msg.sender == address(this), "test only");
+        success = _execSafeTransaction(to, value, data);
+    }
+
+    function _deployRegistry() internal returns (IRegistry deployedRegistry) {
+        Registry registryLogic = new Registry();
+        TransparentUpgradeableProxy registryProxy = new TransparentUpgradeableProxy(
+            address(registryLogic), address(this), abi.encodeCall(IRegistry.initialize, (address(this)))
+        );
+        deployedRegistry = IRegistry(address(registryProxy));
+    }
+
+    function _populateRegistry() internal {
+        bytes32[] memory keys = new bytes32[](12);
+        keys[0] = RegistryKeys.VAULT;
+        keys[1] = RegistryKeys.WRAPPED_TOKEN;
+        keys[2] = RegistryKeys.WITHDRAWAL_REQUEST;
+        keys[3] = RegistryKeys.WITHDRAWER;
+        keys[4] = RegistryKeys.BAG_FACTORY;
+        keys[5] = RegistryKeys.BAG;
+        keys[6] = RegistryKeys.FLEX_STRATEGY;
+        keys[7] = RegistryKeys.ACCOUNTING_MODULE;
+        keys[8] = RegistryKeys.ACCOUNTING_TOKEN_FACTORY;
+        keys[9] = RegistryKeys.REWARDS_SWEEPER;
+        keys[10] = RegistryKeys.SAFE_GUARD;
+        keys[11] = RegistryKeys.HOOKS_DEPLOYER;
+
+        address[] memory values = new address[](12);
+        values[0] = RegistryImplementations.VAULT_IMPLEMENTATION;
+        values[1] = RegistryImplementations.WRAPPED_TOKEN_IMPLEMENTATION;
+        values[2] = RegistryImplementations.WITHDRAWAL_REQUEST_IMPLEMENTATION;
+        values[3] = RegistryImplementations.WITHDRAWER_IMPLEMENTATION;
+        values[4] = RegistryImplementations.BAG_FACTORY_IMPLEMENTATION;
+        values[5] = RegistryImplementations.BAG_IMPLEMENTATION;
+        values[6] = RegistryImplementations.FLEX_STRATEGY_IMPLEMENTATION;
+        values[7] = RegistryImplementations.ACCOUNTING_MODULE_IMPLEMENTATION;
+        values[8] = RegistryImplementations.ACCOUNTING_TOKEN_FACTORY_IMPLEMENTATION;
+        values[9] = RegistryImplementations.REWARDS_SWEEPER_IMPLEMENTATION;
+        values[10] = RegistryImplementations.SAFE_GUARD_IMPLEMENTATION;
+        values[11] = RegistryImplementations.HOOKS_DEPLOYER;
+
+        registry.setValues(keys, values);
+    }
+
+    function _vaultParams() internal pure returns (IVaultFactory.VaultParams memory) {
+        return IVaultFactory.VaultParams({
+            admin: TestConstants.ADMIN,
+            proposer: TestConstants.PROPOSER,
+            processor: TestConstants.PROCESSOR,
+            pauser: TestConstants.PAUSER,
+            unpauser: TestConstants.UNPAUSER,
+            resolver: TestConstants.RESOLVER,
+            baseAsset: TestConstants.USDC,
+            tokenName: "Whitelabel Flex USDC",
+            tokenSymbol: "WLFUSDC",
+            countNativeAsset: false,
+            alwaysComputeTotalAssets: true,
+            timelockDuration: 30 seconds,
+            minWithdrawalAmount: 0.1 ether,
+            maxDataLength: 256,
+            bootstrapAmount: BOOTSTRAP_AMOUNT,
+            bootstrapReceiver: TestConstants.BOOTSTRAP_RECEIVER
+        });
+    }
+
+    function _flexParams(address multisig) internal pure returns (IVaultFactory.FlexStrategyParams memory) {
+        return IVaultFactory.FlexStrategyParams({
+            deployStrategy: true,
+            deployRewardsSweeper: true,
+            alwaysComputeTotalAssets: true,
+            multisig: multisig,
+            offRampAddress: TestConstants.OFF_RAMP,
+            accountingProcessor: TestConstants.PROCESSOR,
+            lossProcessor: TestConstants.LOSS_PROCESSOR,
+            targetApy: 0.05e18,
+            lowerBound: 0.01e18,
+            minRewardableAssets: 100e6,
+            strategyName: "Flex Strategy",
+            strategySymbol: "FLEX",
+            accountingTokenName: "Flex Accounting",
+            accountingTokenSymbol: "aFLEX"
+        });
+    }
+
+    function _emptyHooksConfig() internal pure returns (IVaultFactory.HooksConfig memory hooksConfig) {}
+}
