@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IRegistry} from "src/interfaces/IRegistry.sol";
@@ -14,7 +15,9 @@ import {SafeTestLib} from "test/lib/SafeTestLib.sol";
 import {TestConstants} from "test/lib/TestConstants.sol";
 import {ISafe} from "lib/safeguard/lib/safe-smart-account/contracts/interfaces/ISafe.sol";
 import {HooksLib} from "lib/yieldnest-vault/src/library/HooksLib.sol";
+import {FeeHooks} from "lib/yieldnest-vault/src/hooks/FeeHooks.sol";
 import {PauserHook} from "lib/yieldnest-vault-periphery/src/hooks/PauserHook.sol";
+import {ProcessAccountingGuardHook} from "lib/yieldnest-vault-periphery/src/hooks/ProcessAccountingGuardHook.sol";
 
 interface IVaultHooksFlow {
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
@@ -30,6 +33,7 @@ interface IVaultHooksFlow {
     function previewWithdraw(uint256 assets) external view returns (uint256 shares);
     function totalAssets() external view returns (uint256 assets);
     function totalSupply() external view returns (uint256 supply);
+    function alwaysComputeTotalAssets() external view returns (bool);
     function hooks() external view returns (address);
 }
 
@@ -82,11 +86,7 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         assertEq(IHookName(created.metaHooks).name(), "MetaHooks", "meta hooks name");
         assertEq(IHookName(created.pauserHook).name(), "PauserHook", "pauser hook name");
         assertEq(IHookName(created.feeHook).name(), "PerformanceFeeHooks", "fee hook name");
-        assertEq(
-            IHookName(created.processAccountingGuardHook).name(),
-            "ProcessAccountingGuardHook",
-            "guard hook name"
-        );
+        assertEq(IHookName(created.processAccountingGuardHook).name(), "ProcessAccountingGuardHook", "guard hook name");
         assertEq(IVaultHooksFlow(created.vault).hooks(), created.metaHooks, "vault hooks");
 
         IMetaHooksFlow metaHooks = IMetaHooksFlow(created.metaHooks);
@@ -148,10 +148,10 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
         IVaultHooksFlow(created.vault).processAccounting();
 
         uint256 totalAssetsAfter = IVaultHooksFlow(created.vault).totalAssets();
-        uint256 strategyAssetsAdded = IVaultHooksFlow(created.flexStrategy).totalAssets() - beforeAccounting.strategyAssets;
-        uint256 vaultStrategyAssetsAdded = IVaultHooksFlow(created.flexStrategy).convertToAssets(
-            beforeAccounting.vaultStrategyShares
-        ) - beforeAccounting.vaultStrategyAssets;
+        uint256 strategyAssetsAdded =
+            IVaultHooksFlow(created.flexStrategy).totalAssets() - beforeAccounting.strategyAssets;
+        uint256 vaultStrategyAssetsAdded = IVaultHooksFlow(created.flexStrategy)
+            .convertToAssets(beforeAccounting.vaultStrategyShares) - beforeAccounting.vaultStrategyAssets;
         uint256 mainVaultAssetsAdded = totalAssetsAfter - beforeAccounting.totalAssets;
         uint256 feeBaseAssets = mainVaultAssetsAdded * PERFORMANCE_FEE / 1e18;
         uint256 expectedFeeShares = feeBaseAssets * beforeAccounting.totalSupply / (totalAssetsAfter - feeBaseAssets);
@@ -165,6 +165,76 @@ contract VaultFactoryFlexFlowHooksIntegrationTest is Test {
             IERC20(created.vault).balanceOf(beforeAccounting.feeRecipient) - beforeAccounting.feeRecipientShares,
             expectedFeeShares,
             "fee shares"
+        );
+    }
+
+    function test_FeeHook_Zero_Fee_Processes_Rewards_Without_Minting_Shares() public {
+        uint256 userDeposit = 1_000_000e6;
+        uint256 rewards = 1_000e6;
+
+        assertFalse(IVaultHooksFlow(created.vault).alwaysComputeTotalAssets(), "main vault uses cached accounting");
+
+        vm.prank(TestConstants.ADMIN);
+        FeeHooks(created.feeHook).setPerformanceFee(0);
+        assertEq(FeeHooks(created.feeHook).performanceFee(), 0, "fee disabled");
+        // Keep the guard at 10% to verify it accepts zero fee shares.
+        assertEq(
+            ProcessAccountingGuardHook(created.processAccountingGuardHook).expectedPerformanceFee(),
+            PERFORMANCE_FEE,
+            "guard expected fee unchanged"
+        );
+
+        _depositToVault(TestConstants.DEPOSITOR, userDeposit);
+        _moveVaultAssetsToFlexStrategy(userDeposit);
+        FeeAccountingSnapshot memory beforeAccounting = _feeAccountingSnapshot();
+
+        skip(365 days);
+        vm.prank(TestConstants.PROCESSOR);
+        IAccountingModuleHooksFlow(created.accountingModule).processRewards(rewards);
+
+        assertEq(
+            IVaultHooksFlow(created.vault).totalAssets(),
+            beforeAccounting.totalAssets,
+            "assets cached before accounting"
+        );
+        uint256 supplyBeforeProcessAccounting = IVaultHooksFlow(created.vault).totalSupply();
+        vm.recordLogs();
+        IVaultHooksFlow(created.vault).processAccounting();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(
+            IVaultHooksFlow(created.vault).totalSupply(),
+            supplyBeforeProcessAccounting,
+            "accounting leaves supply unchanged"
+        );
+        assertFalse(IVaultHooksFlow(created.vault).alwaysComputeTotalAssets(), "cached accounting remains enabled");
+        // Check mint events too, so an offsetting burn cannot hide a mint in the supply comparison.
+        for (uint256 i; i < logs.length; ++i) {
+            if (
+                logs[i].emitter == created.vault && logs[i].topics.length == 3
+                    && logs[i].topics[0] == keccak256("Transfer(address,address,uint256)")
+            ) {
+                assertNotEq(logs[i].topics[1], bytes32(0), "accounting must not emit a share mint");
+            }
+        }
+
+        uint256 vaultStrategyAssetsAdded = IVaultHooksFlow(created.flexStrategy)
+            .convertToAssets(beforeAccounting.vaultStrategyShares) - beforeAccounting.vaultStrategyAssets;
+        assertEq(
+            IVaultHooksFlow(created.flexStrategy).totalAssets() - beforeAccounting.strategyAssets,
+            rewards,
+            "strategy rewards recognized"
+        );
+        assertGt(vaultStrategyAssetsAdded, 0, "positive vault rewards");
+        assertEq(
+            IVaultHooksFlow(created.vault).totalAssets(),
+            beforeAccounting.totalAssets + vaultStrategyAssetsAdded,
+            "main vault rewards recognized"
+        );
+        assertEq(IVaultHooksFlow(created.vault).totalSupply(), beforeAccounting.totalSupply, "no shares minted");
+        assertEq(
+            IERC20(created.vault).balanceOf(beforeAccounting.feeRecipient),
+            beforeAccounting.feeRecipientShares,
+            "no fee shares received"
         );
     }
 
