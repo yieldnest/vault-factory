@@ -5,6 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {VaultVerifier, IAccessControlView, IVaultView} from "src/VaultVerifier.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
+import {VaultVerifierLib} from "src/verifier/VaultVerifierLib.sol";
+import {WithdrawalSystemVerifierLib} from "src/verifier/WithdrawalSystemVerifierLib.sol";
 
 contract VaultVerifierHarness is VaultVerifier, Test {
     function verifyRole(address target, bytes32 role, address account, bool expected) external view {
@@ -35,6 +37,8 @@ contract VaultVerifierTest is Test {
     function test_RuntimeFitsDeploymentLimit() public {
         VaultVerifier verifier = new VaultVerifier();
         assertLe(address(verifier).code.length, 24_576);
+        assertLe(address(VaultVerifierLib).code.length, 24_576);
+        assertLe(address(WithdrawalSystemVerifierLib).code.length, 24_576);
     }
 
     function testFuzz_RoleCheckPreservesExpectation(bytes32 role, address account, bool actual, bool expected) public {

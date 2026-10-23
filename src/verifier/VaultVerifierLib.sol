@@ -2,24 +2,19 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IRegistry} from "src/interfaces/IRegistry.sol";
 import {IVaultFactory} from "src/interfaces/IVaultFactory.sol";
-import {IRequestPolicy} from "lib/yieldnest-vault-withdrawals/src/interface/IRequestPolicy.sol";
 import {IAccountingModule} from "src/interfaces/external/IAccountingModule.sol";
 import {IAccountingToken} from "src/interfaces/external/IAccountingToken.sol";
-import {IBeaconProxyFactory} from "src/interfaces/external/IBeaconProxyFactory.sol";
 import {IERC20Metadata} from "src/interfaces/external/IERC20Metadata.sol";
 import {IFlexStrategy} from "src/interfaces/external/IFlexStrategy.sol";
 import {IVault} from "src/interfaces/external/IVault.sol";
-import {IWithdrawalRequest} from "src/interfaces/external/IWithdrawalRequest.sol";
-import {IWithdrawer} from "src/interfaces/external/IWithdrawer.sol";
 import {IWrappedToken} from "src/interfaces/external/IWrappedToken.sol";
-import {RegistryKeys} from "src/lib/RegistryKeys.sol";
 import {BaseAssetProvider} from "src/provider/BaseAssetProvider.sol";
 import {FlexProvider} from "src/provider/FlexProvider.sol";
 import {AccountingModuleHookVerifierLib} from "src/verifier/AccountingModuleHookVerifierLib.sol";
 import {HooksVerifierLib} from "src/verifier/HooksVerifierLib.sol";
 import {SafeGuardVerifierLib} from "src/verifier/SafeGuardVerifierLib.sol";
+import {WithdrawalSystemVerifierLib} from "src/verifier/WithdrawalSystemVerifierLib.sol";
 import {TimelockVerifierLib} from "src/verifier/TimelockVerifierLib.sol";
 
 library VaultVerifierLib {
@@ -40,16 +35,11 @@ library VaultVerifierLib {
     bytes32 internal constant ALLOCATOR_ROLE = keccak256("ALLOCATOR_ROLE");
     bytes32 internal constant ACCOUNTING_MODULE_MANAGER_ROLE = keccak256("ACCOUNTING_MODULE_MANAGER_ROLE");
     bytes32 internal constant FEE_MANAGER_ROLE = keccak256("FEE_MANAGER_ROLE");
-    bytes32 internal constant ASSET_WITHDRAWER_ROLE = keccak256("ASSET_WITHDRAWER_ROLE");
     bytes32 internal constant SAFE_MANAGER_ROLE = keccak256("SAFE_MANAGER_ROLE");
     bytes32 internal constant REWARDS_PROCESSOR_ROLE = keccak256("REWARDS_PROCESSOR_ROLE");
     bytes32 internal constant LOSS_PROCESSOR_ROLE = keccak256("LOSS_PROCESSOR_ROLE");
     bytes32 internal constant REWARDS_SWEEPER_ROLE = keccak256("REWARDS_SWEEPER_ROLE");
     bytes32 internal constant SNAPSHOT_REWARDS_SWEEPER_ROLE = keccak256("SNAPSHOT_REWARDS_SWEEPER_ROLE");
-    bytes32 internal constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
-    bytes32 internal constant CONFIGURATION_MANAGER_ROLE = keccak256("CONFIGURATION_MANAGER_ROLE");
-    bytes32 internal constant CREATOR_ROLE = keccak256("CREATOR_ROLE");
-    bytes32 internal constant IMPLEMENTATION_MANAGER_ROLE = keccak256("IMPLEMENTATION_MANAGER_ROLE");
 
     struct Verification {
         address factory;
@@ -75,7 +65,7 @@ library VaultVerifierLib {
             verification.factory, verification.created, verification.vaultParams, verification.hooksConfig
         );
         _verifyProvider(verification, effectiveBaseAsset);
-        _verifyWithdrawalSystem(verification);
+        WithdrawalSystemVerifierLib.verify(verification.factory, verification.created, verification.vaultParams);
 
         if (verification.flexParams.deployStrategy) {
             _verifyFlexStrategy(verification);
@@ -158,48 +148,6 @@ library VaultVerifierLib {
             _verify(provider.getRate(effectiveBaseAsset) == PROVIDER_RATE, "provider base rate");
             _verify(provider.getRate(params.baseAsset) == PROVIDER_RATE, "provider default rate");
         }
-    }
-
-    function _verifyWithdrawalSystem(Verification memory verification) internal view {
-        IVaultFactory.CreatedVault memory created = verification.created;
-        IVaultFactory.VaultParams memory params = verification.vaultParams;
-        IRegistry registry = IVaultFactoryView(verification.factory).REGISTRY();
-
-        IWithdrawalRequestView request = IWithdrawalRequestView(created.withdrawalRequest);
-        _verify(created.withdrawalRequest.code.length != 0, "request code");
-        _verify(address(request.token()) == created.vault, "request token");
-        _verify(address(request.bagFactory()) == created.bagFactory, "request bag factory");
-        _verify(address(request.withdrawer()) == created.withdrawer, "request withdrawer");
-        _verify(address(request.requestPolicy()) == created.requestPolicy, "request policy");
-        _verify(request.maxDataLength() == params.maxDataLength, "request data length");
-        _verifyRole(request, DEFAULT_ADMIN_ROLE, created.timelock, true, "request admin");
-        _verifyRole(request, DEFAULT_ADMIN_ROLE, params.admin, true, "request external admin");
-        _verifyRole(request, RESOLVER_ROLE, params.resolver, true, "request resolver");
-        _verifyRole(request, CONFIGURATION_MANAGER_ROLE, created.timelock, true, "request config");
-        _verifyRole(request, PAUSER_ROLE, params.pauser, true, "request pauser");
-        _verifyRole(request, PAUSER_ROLE, params.admin, true, "request admin pauser");
-        _verifyRole(request, DEFAULT_ADMIN_ROLE, verification.factory, false, "request dangling admin");
-        _verifyRole(request, CONFIGURATION_MANAGER_ROLE, verification.factory, false, "request dangling config");
-
-        IWithdrawerView withdrawer = IWithdrawerView(created.withdrawer);
-        _verify(created.withdrawer.code.length != 0, "withdrawer code");
-        _verify(address(withdrawer.token()) == created.vault, "withdrawer token");
-        _verify(withdrawer.withdrawalRequest() == created.withdrawalRequest, "withdrawer request");
-
-        IBeaconProxyFactoryView bagFactory = IBeaconProxyFactoryView(created.bagFactory);
-        _verify(created.bagFactory.code.length != 0, "bag factory code");
-        _verify(bagFactory.implementation() == registry.valueOf(RegistryKeys.BAG), "bag implementation");
-        _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, created.timelock, true, "bag admin");
-        _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, params.admin, true, "bag external admin");
-        _verifyRole(bagFactory, CREATOR_ROLE, created.withdrawalRequest, true, "bag creator");
-        _verifyRole(bagFactory, IMPLEMENTATION_MANAGER_ROLE, created.timelock, true, "bag implementation manager");
-        _verifyRole(bagFactory, DEFAULT_ADMIN_ROLE, verification.factory, false, "bag dangling admin");
-
-        _verify(
-            IRequestPolicyView(created.requestPolicy).minWithdrawalAmount() == params.minWithdrawalAmount,
-            "request min amount"
-        );
-        _verifyRole(IVaultView(created.vault), ASSET_WITHDRAWER_ROLE, created.withdrawer, true, "vault withdrawer role");
     }
 
     function _verifyFlexStrategy(Verification memory verification) internal view {
@@ -511,10 +459,6 @@ library VaultVerifierLib {
     }
 }
 
-interface IVaultFactoryView {
-    function REGISTRY() external view returns (IRegistry);
-}
-
 interface IAccessControlView {
     function hasRole(bytes32 role, address account) external view returns (bool);
 }
@@ -532,11 +476,3 @@ interface IRewardsSweeperView is IAccessControlView {
 }
 
 interface IWrappedTokenView is IWrappedToken {}
-
-interface IWithdrawalRequestView is IWithdrawalRequest, IAccessControlView {}
-
-interface IWithdrawerView is IWithdrawer {}
-
-interface IBeaconProxyFactoryView is IBeaconProxyFactory, IAccessControlView {}
-
-interface IRequestPolicyView is IRequestPolicy {}
